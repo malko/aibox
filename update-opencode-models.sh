@@ -91,7 +91,8 @@ build_models_json() {
         
         # Add context limit if available
         if [[ -n "$max_context" && "$max_context" != "null" ]]; then
-            props="$props, \"limit\": {\"context\": $max_context}"
+            local max_output=32000
+            props="$props, \"limit\": {\"context\": $max_context, \"output\": $max_output}"
         fi
         
         # Add reasoning capability
