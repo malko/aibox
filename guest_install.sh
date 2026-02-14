@@ -212,13 +212,16 @@ else
     exit 1
 fi
 
+# Prompt for sudo password once (needed for multiple sudo commands later)
+print_info "Note: Some operations require sudo in the VM."
+read -s -p "Enter sudo password for VM (or press Enter to prompt later): " SUDO_PASSWORD
+echo ""
+
 if prompt_yes_no "Disable password authentication in VM?" "yes"; then
     print_info "Disabling password authentication..."
     
-    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'EOF'
-sudo sed -i 's/^#*PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-sudo sed -i 's/^#*PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
-sudo systemctl restart sshd
+    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
+echo "$SUDO_PASSWORD" | sudo -S sh -c 'sed -i "s/^#*PasswordAuthentication yes/PasswordAuthentication no/" /etc/ssh/sshd_config && sed -i "s/^#*PermitRootLogin yes/PermitRootLogin no/" /etc/ssh/sshd_config && systemctl restart sshd'
 EOF
     print_success "Password authentication disabled!"
 fi
