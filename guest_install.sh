@@ -167,7 +167,7 @@ print_info "Checking if SSH key authentication is already configured..."
 SSH_KEY_PATH="$HOME/.ssh/id_ed25519"
 
 if [[ -f "$SSH_KEY_PATH" && -f "${SSH_KEY_PATH}.pub" ]]; then
-    if ssh -o ConnectTimeout=5 -o PasswordAuthentication=no "$GUEST_USER@$GUEST_IP" "echo 'SSH key auth works!'" &>/dev/null; then
+    if ssh -T -o ConnectTimeout=5 -o PasswordAuthentication=no "$GUEST_USER@$GUEST_IP" "echo 'SSH key auth works!'" &>/dev/null; then
         print_success "SSH key authentication already configured!"
     else
         # Need to configure SSH key
