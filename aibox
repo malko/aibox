@@ -33,6 +33,7 @@ usage() {
     echo "Options:"
     echo "  -w, --open-web  Open browser after connecting"
     echo "  -h, --help     Show this help"
+    echo "  --completion   Output bash completion script"
     exit 0
 }
 
@@ -41,6 +42,58 @@ load_services() {
         jq -r 'to_entries[] | .value' "$SERVICES_FILE" 2>/dev/null || echo ""
     fi
 }
+
+completion() {
+    cat << 'EOF'
+_aibox() {
+    local cur prev opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    opts="service-add service-remove service-list update-models shutdown snapshot"
+    
+    case "${prev}" in
+        aibox)
+            COMPREPLY=($(compgen -W "${opts}" -- "${cur}"))
+            return 0
+            ;;
+        service-add)
+            return 0
+            ;;
+        service-remove)
+            COMPREPLY=($(compgen -W "$(jq -r 'keys[]' ~/.config/aibox/services.json 2>/dev/null)" -- "${cur}"))
+            return 0
+            ;;
+        snapshot)
+            COMPREPLY=($(compgen -W "create list delete revert" -- "${cur}"))
+            return 0
+            ;;
+        shutdown)
+            COMPREPLY=($(compgen -W "-f --force" -- "${cur}"))
+            return 0
+            ;;
+        -f|--force)
+            return 0
+            ;;
+        create|delete|revert)
+            COMPREPLY=($(compgen -W "$(virsh snapshot-list ai-agentbox --name 2>/dev/null)" -- "${cur}"))
+            return 0
+            ;;
+    esac
+    
+    COMPREPLY=($(compgen -W "${opts}" -- "${cur}"))
+    return 0
+}
+
+complete -F _aibox aibox
+EOF
+}
+
+if [[ "$1" == "--completion" ]]; then
+    completion
+    exit 0
+fi
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     usage
