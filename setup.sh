@@ -241,15 +241,38 @@ print_info "Installing opencode-web service..."
 ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "source ~/.bashrc && ~/scripts/install-service.sh"
 print_success "Service installed!"
 
+ADD_TO_PATH=$(prompt_config_yes_no "ADD_TO_PATH" "Add 'aibox' command to your PATH?" "yes")
+save_config "ADD_TO_PATH" "$ADD_TO_PATH"
+
+if [[ "$ADD_TO_PATH" == "yes" ]]; then
+    SCRIPT_DIR_ABS="$(cd "$SCRIPT_DIR" && pwd)"
+    BIN_DIR="$HOME/bin"
+    
+    if [[ ! -d "$BIN_DIR" ]]; then
+        mkdir -p "$BIN_DIR"
+    fi
+    
+    ln -sf "$SCRIPT_DIR_ABS/aibox" "$BIN_DIR/aibox"
+    
+    # Add to PATH in shell rc if not already there
+    if ! grep -q 'export PATH="$HOME/bin:$PATH"' "$HOME/.bashrc" 2>/dev/null; then
+        echo 'export PATH="$HOME/bin:$PATH"' >> "$HOME/.bashrc"
+    fi
+    
+    print_success "Added 'aibox' to $BIN_DIR/aibox"
+    echo "Make sure '$HOME/bin' is in your PATH (added to ~/.bashrc)"
+    echo "Run 'source ~/.bashrc' or restart your terminal"
+fi
+
 echo ""
 print_warn "=== Setup Complete! ==="
 print_success "VM '$VM_NAME' is ready!"
 echo ""
 print_info "To connect to your VM, run:"
-echo "  ./aibox"
+echo "  aibox"
 echo ""
 print_info "To access opencode web interface:"
-echo "  ./aibox"
+echo "  aibox"
 echo "  Then open http://localhost:4096"
 echo ""
 print_info "Or directly on the network (requires /etc/hosts or avahi):"
