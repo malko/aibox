@@ -121,7 +121,7 @@ fi
 print_success "VM '$VM_NAME' found!"
 
 print_info "Starting VM..."
-virsh start "$VM_NAME"
+virsh start "$VM_NAME" 2>/dev/null || true
 
 print_info "Waiting for VM to boot..."
 sleep 5
