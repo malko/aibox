@@ -5,7 +5,21 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m'
+
+print_ascii_logo() {
+    echo -e "${CYAN}"
+    cat << 'EOF'
+ █████╗ ██╗█████╗    █████╗  ██╗   ██╗  
+██╔══██╗╚═╝██╔═██╗  ██╔══██╗ ╚██╗ ██╔╝
+███████║██║███████║██╔╝   ██╗ ╚═██╔═╝
+██╔══██║██║██╔══██║ ██╗  ██╔╝ ██╔═██╗
+██║  ██║██║███████║  █████╔╝ ██╔╝ ╚██╗
+╚═╝  ╚═╝╚═╝╚══════╝  ╚════╝  ╚═╝   ╚═╝
+EOF
+    echo -e "${NC}"
+}
 
 print_info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
 print_success() { echo -e "${GREEN}✅ $1${NC}"; }
@@ -51,8 +65,10 @@ check_command() {
     fi
 }
 
+print_ascii_logo
+
 HOSTNAME_LOCAL=$(hostname).local
-print_warn "=== AIBox VM Setup Script ==="
+print_info "=== AIBox VM Setup Script ==="
 print_info "This script will help configure your VM as an AIBox"
 print_info "Host detected: $HOSTNAME_LOCAL"
 echo ""
