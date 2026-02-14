@@ -54,7 +54,7 @@ prompt_config_yes_no() {
         fi
         case "$result" in
             y|Y) echo "yes"; return 0 ;;
-            n|N) echo "no"; return 1 ;;
+            n|N) echo "no"; return 0 ;;
         esac
     done
 }

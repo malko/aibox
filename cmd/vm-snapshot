@@ -1,0 +1,161 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+VM_NAME="ai-agentbox"
+ACTION="${1:-}"
+SNAPSHOT_NAME="${2:-}"
+
+CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
+SNAPSHOT_DIR_DEFAULT="$HOME/aibox/snapshots"
+
+load_config() {
+    if [[ -f "$CONFIG_FILE" ]]; then
+        source "$CONFIG_FILE"
+    fi
+    SNAPSHOT_DIR="${SNAPSHOT_DIR:-$SNAPSHOT_DIR_DEFAULT}"
+}
+
+save_config() {
+    local key="$1"
+    local value="$2"
+    
+    mkdir -p "$(dirname "$CONFIG_FILE")"
+    
+    if [[ -n "$key" && -n "$value" ]]; then
+        if grep -qE "^${key}=" "$CONFIG_FILE" 2>/dev/null; then
+            sed -i "s|^${key}=.*|${key}=\"${value}\"|" "$CONFIG_FILE"
+        else
+            echo "${key}=\"${value}\"" >> "$CONFIG_FILE"
+        fi
+    fi
+}
+
+ensure_snapshot_dir() {
+    if [[ ! -d "$SNAPSHOT_DIR" ]]; then
+        echo "Creating snapshot directory: $SNAPSHOT_DIR"
+        mkdir -p "$SNAPSHOT_DIR"
+    fi
+}
+
+prompt_snapshot_dir() {
+    load_config
+    if [[ -z "$SNAPSHOT_DIR" ]]; then
+        echo "Snapshot directory not configured."
+        read -p "Enter snapshot directory path [$SNAPSHOT_DIR_DEFAULT]: " SNAPSHPATH
+        SNAPSHOT_DIR="${SNAPSHPATH:-$SNAPSHOT_DIR_DEFAULT}"
+        ensure_snapshot_dir
+        save_config "SNAPSHOT_DIR" "$SNAPSHOT_DIR"
+    fi
+}
+
+vm_state() {
+    virsh domstate "$VM_NAME" 2>/dev/null || echo "unknown"
+}
+
+check_virtiofs() {
+    # Check if VM has filesystem (virtiofs) configured
+    if virsh dominfo "$VM_NAME" 2>/dev/null | grep -q "Filesystem"; then
+        return 0  # Has virtiofs
+    fi
+    return 1  # No virtiofs
+}
+
+case "$ACTION" in
+    list)
+        echo "Snapshots for VM '$VM_NAME':"
+        virsh snapshot-list "$VM_NAME" --name 2>/dev/null || echo "No snapshots found."
+        ;;
+    
+    create)
+        if [[ -z "$SNAPSHOT_NAME" ]]; then
+            SNAPSHOT_NAME="aibox-$(date +%Y%m%d-%H%M%S)"
+        fi
+        
+        load_config
+        prompt_snapshot_dir
+        ensure_snapshot_dir
+        
+        STATE=$(vm_state)
+        if [[ "$STATE" == "running" ]]; then
+            if check_virtiofs; then
+                echo "Warning: virtiofs is in use. Snapshot while running may fail."
+                echo "Consider shutting down the VM first: ./aibox shutdown"
+                echo ""
+                read -p "Continue anyway? [y/N]: " -n 1 -r
+                echo
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    echo "Cancelled."
+                    exit 0
+                fi
+            fi
+        fi
+        
+        echo "Creating snapshot '$SNAPSHOT_NAME'..."
+        virsh snapshot-create-as "$VM_NAME" "$SNAPSHOT_NAME" \
+            --disk-only=no \
+            --atomic 2>/dev/null || {
+            echo "Failed to create snapshot. Try shutting down the VM first."
+            exit 1
+        }
+        
+        echo "Snapshot '$SNAPSHOT_NAME' created successfully."
+        ;;
+    
+    delete)
+        if [[ -z "$SNAPSHOT_NAME" ]]; then
+            echo "Usage: $0 delete <snapshot-name>"
+            exit 1
+        fi
+        
+        echo "Deleting snapshot '$SNAPSHOT_NAME'..."
+        virsh snapshot-delete "$VM_NAME" "$SNAPSHOT_NAME" --metadata 2>/dev/null || \
+            virsh snapshot-delete "$VM_NAME" "$SNAPSHOT_NAME"
+        
+        echo "Snapshot '$SNAPSHOT_NAME' deleted."
+        ;;
+    
+    revert)
+        if [[ -z "$SNAPSHOT_NAME" ]]; then
+            echo "Usage: $0 revert <snapshot-name>"
+            exit 1
+        fi
+        
+        STATE=$(vm_state)
+        if [[ "$STATE" == "running" ]]; then
+            echo "VM is running. Shutting down before reverting..."
+            virsh shutdown "$VM_NAME"
+            for i in {1..30}; do
+                STATE=$(vm_state)
+                [[ "$STATE" == "shut off" ]] && break
+                sleep 1
+            done
+        fi
+        
+        echo "Reverting to snapshot '$SNAPSHOT_NAME'..."
+        virsh snapshot-revert "$VM_NAME" "$SNAPSHOT_NAME"
+        
+        echo ""
+        echo "VM reverted to '$SNAPSHOT_NAME'."
+        echo "Run './aibox start' to restart the VM."
+        ;;
+    
+    *)
+        echo "Usage: $0 <command> [options]"
+        echo ""
+        echo "Commands:"
+        echo "  create [name]     Create snapshot (auto-generates name if not provided)"
+        echo "  list              List all snapshots"
+        echo "  delete <name>    Delete a snapshot"
+        echo "  revert <name>    Revert to a snapshot"
+        echo ""
+        echo "Examples:"
+        echo "  $0 create                  # Create snapshot with auto-generated name"
+        echo "  $0 create my-snapshot     # Create snapshot with custom name"
+        echo "  $0 list                   # List all snapshots"
+        echo "  $0 delete my-snapshot     # Delete a snapshot"
+        echo "  $0 revert my-snapshot     # Revert to a snapshot"
+        exit 1
+        ;;
+esac

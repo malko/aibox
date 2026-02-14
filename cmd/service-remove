@@ -1,0 +1,27 @@
+#!/bin/bash
+set -e
+
+SERVICES_FILE="${HOME}/.config/aibox/services.json"
+
+if [[ $# -lt 1 ]]; then
+    echo "Usage: $0 <service-name>"
+    echo "Example: $0 opencode"
+    exit 1
+fi
+
+SERVICE_NAME="$1"
+
+if [[ ! -f "$SERVICES_FILE" ]]; then
+    echo "No services configured."
+    exit 1
+fi
+
+if ! grep -q "\"$SERVICE_NAME\"" "$SERVICES_FILE" 2>/dev/null; then
+    echo "Service '$SERVICE_NAME' not found."
+    exit 1
+fi
+
+TEMP=$(mktemp)
+jq --arg name "$SERVICE_NAME" 'del(.[$name])' "$SERVICES_FILE" > "$TEMP" && mv "$TEMP" "$SERVICES_FILE"
+
+echo "Removed service '$SERVICE_NAME'"

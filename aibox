@@ -1,0 +1,173 @@
+#!/bin/bash
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CMD_DIR="$SCRIPT_DIR/cmd"
+
+# --- CONFIGURATION ---
+VM_NAME="ai-agentbox"
+GUEST_USER="malko"
+
+SERVICES_FILE="${HOME}/.config/aibox/services.json"
+
+usage() {
+    echo "Usage: $0 [options] [service] [host_port:guest_port] [port] ..."
+    echo ""
+    echo "Commands:"
+    echo "  service-add <name> <port[:port]>    Add a service"
+    echo "  service-remove <name>              Remove a service"
+    echo "  service-list                       List configured services"
+    echo "  shutdown [-f]                     Shutdown VM (use -f to force)"
+    echo "  snapshot create [name]             Create snapshot"
+    echo "  snapshot list                      List snapshots"
+    echo "  snapshot delete <name>             Delete snapshot"
+    echo "  snapshot revert <name>             Revert to snapshot"
+    echo ""
+    echo "Examples:"
+    echo "  $0                                Connect with all services"
+    echo "  $0 service-add opencode 4096     Add opencode service"
+    echo "  $0 shutdown                       Gracefully shutdown VM"
+    echo "  $0 shutdown -f                    Force shutdown VM"
+    echo "  $0 snapshot create                Create snapshot with auto name"
+    echo "  $0 snapshot list                  List all snapshots"
+    echo "  $0 snapshot revert my-snapshot    Revert to snapshot"
+    echo ""
+    echo "Options:"
+    echo "  -w, --open-web  Open browser after connecting"
+    echo "  -h, --help     Show this help"
+    exit 0
+}
+
+load_services() {
+    if [[ -f "$SERVICES_FILE" ]]; then
+        jq -r 'to_entries[] | .value' "$SERVICES_FILE" 2>/dev/null || echo ""
+    fi
+}
+
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    usage
+fi
+
+# Handle commands
+case "$1" in
+    service-add)
+        "$CMD_DIR/service-add" "${@:2}"
+        exit $?
+        ;;
+    service-remove)
+        "$CMD_DIR/service-remove" "${@:2}"
+        exit $?
+        ;;
+    service-list)
+        "$CMD_DIR/service-list"
+        exit $?
+        ;;
+    shutdown)
+        "$CMD_DIR/vm-shutdown" "$VM_NAME" "${2:-}"
+        exit $?
+        ;;
+    snapshot)
+        "$CMD_DIR/vm-snapshot" "${@:2}"
+        exit $?
+        ;;
+esac
+
+OPEN_WEB=false
+
+# Parse options
+while [[ "$1" == "-"* ]]; do
+    case "$1" in
+        -w|--open-web)
+            OPEN_WEB=true
+            ;;
+        *)
+            ;;
+    esac
+    shift
+done
+
+# Load services from config
+SERVICES=()
+while IFS= read -r port; do
+    [[ -n "$port" ]] && SERVICES+=("$port")
+done < <(load_services)
+
+# Merge command line args with services
+ALL_PORTS=("${SERVICES[@]}")
+for arg in "$@"; do
+    ALL_PORTS+=("$arg")
+done
+
+# Use all ports or default to services
+if [[ ${#ALL_PORTS[@]} -eq 0 && ${#SERVICES[@]} -gt 0 ]]; then
+    set -- "${SERVICES[@]}"
+elif [[ ${#ALL_PORTS[@]} -eq 0 ]]; then
+    echo "No services configured. Add one with: $0 service-add <name> <port>"
+    exit 1
+else
+    set -- "${ALL_PORTS[@]}"
+fi
+
+# Start VM if it's not running
+VM_STATE=$(virsh domstate "$VM_NAME" 2>/dev/null)
+if [ "$VM_STATE" != "running" ]; then
+    echo "Starting $VM_NAME..."
+    virsh start "$VM_NAME"
+fi
+
+# Dynamic IP Detection
+echo -n "Detecting Guest IP..."
+for i in {1..20}; do
+    GUEST_IP=$(virsh domifaddr "$VM_NAME" --source lease | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)
+    if [ -n "$GUEST_IP" ]; then
+        break
+    fi
+    printf "."
+    sleep 1
+done
+
+if [ -z "$GUEST_IP" ]; then
+    echo -e "\nError: Could not detect Guest IP."
+    exit 1
+fi
+echo -e "\nFound IP: $GUEST_IP"
+
+# Build the Forwarding String
+FORWARD_ARGS=""
+for ARG in "$@"; do
+    if [[ "$ARG" == *:* ]]; then
+        HOST_PORT="${ARG%%:*}"
+        GUEST_PORT="${ARG#*:}"
+    else
+        HOST_PORT="$ARG"
+        GUEST_PORT="$ARG"
+    fi
+    
+    FORWARD_ARGS="$FORWARD_ARGS -L 0.0.0.0:$HOST_PORT:$GUEST_IP:$GUEST_PORT"
+done
+
+# Wait for SSH to be ready
+echo -n "Waiting for SSH..."
+while ! nc -z -w 1 "$GUEST_IP" 22 &>/dev/null; do
+    printf "."
+    sleep 1
+done
+echo -e "\nSSH is ready!"
+
+# Connect
+echo "Connecting to $GUEST_USER@$GUEST_IP with port(s): $@"
+
+# Open browser if -w flag is set
+if [[ "$OPEN_WEB" == "true" ]]; then
+    HOST_PORT="$1"
+    HOSTNAME_LOCAL=$(hostname).local
+    BROWSER_URL="http://${HOSTNAME_LOCAL}:${HOST_PORT}"
+    
+    echo "Opening browser to $BROWSER_URL..."
+    if command -v xdg-open &>/dev/null; then
+        xdg-open "$BROWSER_URL" &
+    elif command -v open &>/dev/null; then
+        open "$BROWSER_URL" &
+    fi
+fi
+
+ssh -o ConnectTimeout=5 $FORWARD_ARGS "$GUEST_USER@$GUEST_IP"

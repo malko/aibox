@@ -1,0 +1,26 @@
+#!/bin/bash
+set -e
+
+VM_NAME="${1:-ai-agentbox}"
+FORCE="${2:-}"
+
+if [[ "$FORCE" == "-f" || "$FORCE" == "--force" ]]; then
+    echo "Force shutting down VM '$VM_NAME'..."
+    virsh destroy "$VM_NAME"
+else
+    echo "Gracefully shutting down VM '$VM_NAME'..."
+    virsh shutdown "$VM_NAME"
+    
+    echo "Waiting for VM to shutdown..."
+    for i in {1..30}; do
+        STATE=$(virsh domstate "$VM_NAME" 2>/dev/null || echo "unknown")
+        if [[ "$STATE" == "shut off" ]]; then
+            echo "VM '$VM_NAME' is now shut off."
+            exit 0
+        fi
+        sleep 1
+    done
+    
+    echo "VM did not shutdown in time. Use '$0 $VM_NAME -f' to force shutdown."
+    exit 1
+fi

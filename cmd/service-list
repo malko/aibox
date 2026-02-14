@@ -1,0 +1,11 @@
+#!/bin/bash
+
+SERVICES_FILE="${HOME}/.config/aibox/services.json"
+
+if [[ ! -f "$SERVICES_FILE" ]]; then
+    echo "No services configured."
+    exit 0
+fi
+
+echo "Configured services:"
+jq -r 'to_entries[] | "  \(.key): \(.value)"' "$SERVICES_FILE"

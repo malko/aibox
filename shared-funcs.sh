@@ -12,7 +12,7 @@ print_ascii_logo() {
    d88P  888 888 888  ¨Y88b d88°°88b ¨Y8bd8P¨
   d88P   888 888 888    888 888  888   X88K  
  d8888888888 888 888   d88P Y88..88P .d8¨¨8b.
-d88P     888 888 8888888P"   "Y88P"  888  888
+d88P     888 888 8888888P°   °Y88P°  888  888
 EOF
     echo -e "${NC}"
 }
@@ -66,6 +66,7 @@ prompt_password() {
             print_error "Password cannot be empty"
             continue
         fi
+        echo ""
         read -s -p "Confirm password: " confirm
         echo ""
         if [[ "$password" == "$confirm" ]]; then

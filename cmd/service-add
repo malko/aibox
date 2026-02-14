@@ -1,0 +1,38 @@
+#!/bin/bash
+set -e
+
+SERVICES_FILE="${HOME}/.config/aibox/services.json"
+
+if [[ $# -lt 2 ]]; then
+    echo "Usage: $0 <service-name> <port> | <host_port:guest_port>"
+    echo "Example: $0 opencode 4096"
+    echo "         $0 portainer 8080:9000"
+    exit 1
+fi
+
+SERVICE_NAME="$1"
+PORT_ARG="$2"
+
+# Parse port format
+if [[ "$PORT_ARG" == *:* ]]; then
+    HOST_PORT="${PORT_ARG%%:*}"
+    GUEST_PORT="${PORT_ARG#*:}"
+    PORT_VALUE="$HOST_PORT:$GUEST_PORT"
+else
+    PORT_VALUE="$PORT_ARG"
+fi
+
+mkdir -p "$(dirname "$SERVICES_FILE")"
+
+if [[ -f "$SERVICES_FILE" ]]; then
+    if grep -q "\"$SERVICE_NAME\"" "$SERVICES_FILE" 2>/dev/null; then
+        echo "Service '$SERVICE_NAME' already exists. Use service-remove first."
+        exit 1
+    fi
+    TEMP=$(mktemp)
+    jq --arg name "$SERVICE_NAME" --arg port "$PORT_VALUE" '. + {($name): $port}' "$SERVICES_FILE" > "$TEMP" && mv "$TEMP" "$SERVICES_FILE"
+else
+    echo "{\"$SERVICE_NAME\": \"$PORT_VALUE\"}" > "$SERVICES_FILE"
+fi
+
+echo "Added service '$SERVICE_NAME' on port $PORT_VALUE"

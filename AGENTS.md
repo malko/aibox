@@ -1,32 +1,39 @@
 # AGENTS.md - Guidelines for AI Agents
 
-This repository contains bash scripts for managing an AI development VM and integrating with LM Studio.
+This repository contains bash scripts for managing an AI development VM with KVM/QEMU.
 
 ## Project Overview
 
 - **Type**: Bash scripts collection (no build system, no tests)
 - **Main Scripts**:
-  - `aibox.sh` - KVM/QEMU VM management with SSH port forwarding
-  - `update-opencode-models.sh` - Sync LM Studio models to opencode config
-  - `service_install.sh` - Install opencode-web as systemd user service
+  - `aibox` - Main CLI for VM management and port forwarding
+  - `setup.sh` - Automated VM setup
+  - `cmd/` - Service and VM management commands
 
 ## Commands
 
 ### Running Scripts
 
 ```bash
-# Make executable if needed
-chmod +x script-name.sh
+# Setup VM
+./setup.sh
 
-# Run aibox (VM + port forwarding)
-./aibox.sh [host_port:guest_port] [port] ...
-./aibox.sh 8081:80 3000
+# Connect to VM with port forwarding
+./aibox
+./aibox 4096                    # Forward host 4096 to guest 4096
+./aibox 8081:80 3000           # Multiple ports
 
-# Update opencode models from LM Studio
-./update-opencode-models.sh
+# Service management
+./aibox service-add opencode 4096
+./aibox service-list
+./aibox service-remove opencode
 
-# Install opencode-web service
-./service_install.sh
+# VM management
+./aibox shutdown
+./aibox shutdown -f
+./aibox snapshot create
+./aibox snapshot list
+./aibox snapshot revert <name>
 ```
 
 ### Linting

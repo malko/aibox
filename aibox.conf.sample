@@ -1,0 +1,39 @@
+# AIBox Configuration File
+# This file stores settings for the setup script.
+# Values can be edited manually or will be updated automatically after each run.
+#
+# Usage:
+#   ./setup.sh -c path/to/this/file
+#
+# Boolean values: "yes" or "no"
+
+# VM Configuration
+VM_NAME="aibox"
+GUEST_USER="aibox"
+
+# Create VM if it doesn't exist
+CREATE_VM="yes"
+
+# Security
+DISABLE_PASSWORD_AUTH="yes"
+
+# Installation Options
+INSTALL_DEPS="yes"
+CONFIGURE_GIT="yes"
+CONFIGURE_MOTD="yes"
+INSTALL_DOCKER="yes"
+INSTALL_NPM="yes"
+
+# Nginx Proxy Manager
+NPM_PORT="8443"
+
+# LLM Providers
+CONFIGURE_OLLAMA="no"
+# OLLAMA_URL="http://hostname.local:11434"
+
+CONFIGURE_LMS="no"
+# LMS_URL="http://hostname.local:1234"
+
+# Virtiofs (git share with host)
+CONFIGURE_VIRTIOFS="no"
+# HOST_SHARE_DIR="$HOME/git"
