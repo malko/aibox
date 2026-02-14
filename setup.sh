@@ -263,15 +263,28 @@ if [[ "$ADD_TO_PATH" == "yes" ]]; then
     echo "Make sure '$HOME/bin' is in your PATH (added to ~/.bashrc)"
     echo "Run 'source ~/.bashrc' or restart your terminal"
     
-    ADD_COMPLETION=$(prompt_config_yes_no "ADD_COMPLETION" "Enable bash completion for aibox?" "yes")
+    ADD_COMPLETION=$(prompt_config_yes_no "ADD_COMPLETION" "Enable shell completion for aibox?" "yes")
     save_config "ADD_COMPLETION" "$ADD_COMPLETION"
     
     if [[ "$ADD_COMPLETION" == "yes" ]]; then
-        if ! grep -q 'source <(aibox --completion)' "$HOME/.bashrc" 2>/dev/null; then
-            echo 'source <(aibox --completion)' >> "$HOME/.bashrc"
+        # Detect user's shell
+        USER_SHELL="${SHELL##*/}"
+        
+        if [[ "$USER_SHELL" == "zsh" ]]; then
+            # Zsh completion - create completion file
+            ZSH_COMPLETION_DIR="$HOME/.zsh/completions"
+            mkdir -p "$ZSH_COMPLETION_DIR"
+            "$SCRIPT_DIR/aibox" --completion zsh > "$ZSH_COMPLETION_DIR/_aibox"
+            print_success "Zsh completion enabled!"
+            echo "Completion installed to ~/.zsh/completions/_aibox"
+        else
+            # Bash completion - add to bashrc
+            if ! grep -q 'source <(aibox --completion)' "$HOME/.bashrc" 2>/dev/null; then
+                echo 'source <(aibox --completion)' >> "$HOME/.bashrc"
+            fi
+            print_success "Bash completion enabled!"
+            echo "Run 'source ~/.bashrc' or restart your terminal"
         fi
-        print_success "Bash completion enabled!"
-        echo "Run 'source ~/.bashrc' or restart your terminal"
     fi
 fi
 

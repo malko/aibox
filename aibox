@@ -33,7 +33,7 @@ usage() {
     echo "Options:"
     echo "  -w, --open-web  Open browser after connecting"
     echo "  -h, --help     Show this help"
-    echo "  --completion   Output bash completion script"
+    echo "  --completion   Output shell completion script (bash or zsh)"
     exit 0
 }
 
@@ -44,7 +44,58 @@ load_services() {
 }
 
 completion() {
-    cat << 'EOF'
+    # Detect shell if not specified
+    local shell="${1:-}"
+    [[ -z "$shell" ]] && shell="${BASH_VERSION:+bash}${ZSH_VERSION:+zsh}"
+    
+    if [[ "$shell" == "zsh" ]]; then
+        cat << 'ZEOF'
+#compdef aibox
+
+local -a commands
+commands=(
+  'service-add:add a service'
+  'service-remove:remove a service'
+  'service-list:list configured services'
+  'update-models:update OpenCode models from LLM providers'
+  'shutdown:shutdown VM'
+  'snapshot:manage snapshots'
+)
+
+_arguments -C '1: :->command' '*: :->args'
+
+case $state in
+  command)
+    _describe 'command' commands
+    ;;
+  args)
+    case $words[1] in
+      service-add)
+        _message 'service name'
+        ;;
+      service-remove)
+        _values 'services' $(jq -r 'keys[]' ~/.config/aibox/services.json 2>/dev/null)
+        ;;
+      snapshot)
+        local -a snapshot_cmds
+        snapshot_cmds=(
+          'create:create snapshot'
+          'list:list snapshots'
+          'delete:delete snapshot'
+          'revert:revert to snapshot'
+        )
+        _describe 'snapshot command' snapshot_cmds
+        ;;
+      shutdown)
+        _values 'flags' '-f --force'
+        ;;
+    esac
+    ;;
+esac
+ZEOF
+    else
+        # Bash completion
+        cat << 'BASHEOF'
 _aibox() {
     local cur prev opts
     COMPREPLY=()
@@ -87,11 +138,12 @@ _aibox() {
 }
 
 complete -F _aibox aibox
-EOF
+BASHEOF
+    fi
 }
 
 if [[ "$1" == "--completion" ]]; then
-    completion
+    completion "${2:-}"
     exit 0
 fi
 
