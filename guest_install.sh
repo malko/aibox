@@ -301,6 +301,183 @@ EOF
 print_success "Git and scripts directories created!"
 
 echo ""
+print_info "=== Docker Installation ==="
+
+if prompt_yes_no "Install Docker and Nginx Proxy Manager?" "yes"; then
+    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'DOCKEREOF'
+set -e
+
+echo "Installing Docker..."
+if ! command -v docker &>/dev/null; then
+    curl -fsSL https://get.docker.com -o get-docker.sh
+    sudo sh get-docker.sh
+    rm get-docker.sh
+    sudo usermod -aG docker "$USER"
+fi
+
+echo "Docker installed!"
+DOCKEREOF
+
+    print_success "Docker installed!"
+
+    NPM_PORT=$(prompt "NPM HTTPS port (e.g., 8443)" "8443")
+    
+    while true; do
+        read -s -p "Enter password for opencode-web access: " NPM_AUTH_PASSWORD
+        echo ""
+        if [[ -z "$NPM_AUTH_PASSWORD" ]]; then
+            print_error "Password cannot be empty"
+            continue
+        fi
+        read -s -p "Confirm password: " NPM_AUTH_PASSWORD_CONFIRM
+        echo ""
+        if [[ "$NPM_AUTH_PASSWORD" == "$NPM_AUTH_PASSWORD_CONFIRM" ]]; then
+            break
+        else
+            print_error "Passwords do not match, try again"
+        fi
+    done
+
+    print_info "Setting up NPM data directory..."
+    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
+set -e
+
+mkdir -p ~/npm-data
+mkdir -p ~/docker
+
+echo "NPM data directory created!"
+EOF
+
+    print_info "Creating docker-compose.yml for NPM..."
+    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'NPMEOF'
+set -e
+
+cat > ~/docker/docker-compose.yml << 'YAML'
+version: '3.8'
+services:
+  npm:
+    image: 'jc21/nginx-proxy-manager:latest'
+    container_name: npm
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '8181:8181'
+    volumes:
+      - ~/npm-data:/data
+      - ~/npm-data/letsencrypt:/etc/letsencrypt
+    environment:
+      - DB_SQLITE_FILE=/data/database.db
+YAML
+
+echo "docker-compose.yml created!"
+NPMEOF
+
+    print_info "Starting NPM container..."
+    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'NPMEOF'
+set -e
+
+cd ~/docker
+docker compose up -d
+
+echo "Waiting for NPM to start..."
+sleep 10
+
+echo "NPM container started!"
+NPMEOF
+
+    print_info "Waiting for NPM to be ready..."
+    for i in {1..30}; do
+        if ssh -o ConnectTimeout=5 "$GUEST_USER@$GUEST_IP" "nc -z localhost 8181" 2>/dev/null; then
+            print_success "NPM is ready!"
+            break
+        fi
+        echo -n "."
+        sleep 2
+    done
+    echo ""
+
+    NPM_DEFAULT_EMAIL="admin@aibox.local"
+    NPM_DEFAULT_USER="admin"
+    NPM_DEFAULT_PASSWORD="$NPM_AUTH_PASSWORD"
+
+    print_info "Configuring NPM..."
+    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
+set -e
+
+cd ~/docker
+
+# Wait for NPM API to be fully ready
+for i in {1..30}; do
+    if curl -s http://localhost:8181/api > /dev/null 2>&1; then
+        break
+    fi
+    sleep 2
+done
+
+# Get initial admin token
+echo "Getting admin token..."
+TOKEN_RESPONSE=\$(curl -s -X POST http://localhost:8181/api/users/admin/auth \\
+    -H "Content-Type: application/json" \\
+    -d '{"email":"$NPM_DEFAULT_EMAIL","password":"$NPM_DEFAULT_PASSWORD"}')
+
+TOKEN=\$(echo \$TOKEN_RESPONSE | jq -r '.token // empty')
+
+if [[ -z "\$TOKEN" ]]; then
+    # Try to create the user if it doesn't exist
+    echo "Creating admin user..."
+    curl -s -X POST http://localhost:8181/api/users \\
+        -H "Content-Type: application/json" \\
+        -d '{"email":"$NPM_DEFAULT_EMAIL","name":"Admin","password":"$NPM_DEFAULT_PASSWORD"}'
+    
+    sleep 2
+    
+    TOKEN_RESPONSE=\$(curl -s -X POST http://localhost:8181/api/users/admin/auth \\
+        -H "Content-Type: application/json" \\
+        -d '{"email":"$NPM_DEFAULT_EMAIL","password":"$NPM_DEFAULT_PASSWORD"}')
+    
+    TOKEN=\$(echo \$TOKEN_RESPONSE | jq -r '.token // empty')
+fi
+
+if [[ -z "\$TOKEN" ]]; then
+    echo "Failed to get admin token. Please configure NPM manually at http://localhost:8181"
+    exit 1
+fi
+
+echo "Admin token obtained!"
+
+# Create proxy host for opencode-web
+echo "Creating proxy host..."
+curl -s -X POST http://localhost:8181/api/nginx/proxies \\
+    -H "Content-Type: application/json" \\
+    -H "Authorization: Bearer \$TOKEN" \\
+    -d '{
+        "domain_names": ["opencode"],
+        "forward_scheme": "http",
+        "forward_host": "localhost",
+        "forward_port": 4096,
+        "access_list_id": "0",
+        "enable_ssl": true,
+        "ssl_cert": "npm",
+        "ssl_key": "npm",
+        "metadata": {"basic_auth": "|opencode|${NPM_AUTH_PASSWORD}|"}
+    }'
+
+echo "Proxy host created!"
+
+# Save port to file for aibox.sh
+echo "$NPM_PORT" > ~/npm-port
+echo "NPM configured!"
+EOF
+
+    print_success "Nginx Proxy Manager configured!"
+    
+    NPM_PORT_CONFIGURED=true
+else
+    NPM_PORT_CONFIGURED=false
+fi
+
+echo ""
 print_info "=== OpenCode Configuration ==="
 
 OPENCODE_CONFIG_DIR="$HOME/.config/opencode"
@@ -453,9 +630,20 @@ print_success "VM '$VM_NAME' is ready!"
 echo ""
 print_info "To connect to your VM through ssh, run:"
 echo "  ./aibox.sh"
-print_info "To access opencode web interface, run:"
-echo "  ./aibox.sh 4096"
-echo "  Then open http://${HOSTNAME_LOCAL}:4096"
+
+if [[ "$NPM_PORT_CONFIGURED" == "true" ]]; then
+    print_info "To access opencode web interface, run:"
+    echo "  ./aibox.sh $NPM_PORT"
+    echo "  Then open https://${HOSTNAME_LOCAL}:$NPM_PORT"
+    echo ""
+    print_info "NPM admin UI: http://${HOSTNAME_LOCAL}:8181"
+    echo "  User: admin, Password: $NPM_AUTH_PASSWORD"
+else
+    print_info "To access opencode web interface, run:"
+    echo "  ./aibox.sh 4096"
+    echo "  Then open http://${HOSTNAME_LOCAL}:4096"
+fi
+
 echo ""
 print_info "To update opencode models later, run in VM:"
 echo "  ~/scripts/update-opencode-models.sh"

@@ -5,18 +5,44 @@ VM_NAME="ai-agentbox"       # Use the name from 'virsh list --all'
 GUEST_USER="malko"      # Your username inside the VM
 
 usage() {
-    echo "Usage: $0 [host_port:guest_port] [port] ..."
+    echo "Usage: $0 [options] [host_port:guest_port] [port] ..."
     echo "Examples:"
     echo "  $0 8081:80       # Forward Host 8081 to Guest 80"
     echo "  $0 3000          # Forward Host 3000 to Guest 3000"
     echo "  $0 8081:80 3000  # Do both at once"
+    echo "  $0 -w            # Connect and open browser to NPM (HTTPS)"
+    echo ""
+    echo "Options:"
+    echo "  -w, --open-web  Open browser to https://hostname.local:8443 after connecting"
+    echo "  -h, --help       Show this help"
     echo ""
     echo "Note: Port forwarding ends automatically when the SSH session closes."
     exit 0
 }
 
+OPEN_WEB=false
+
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     usage
+fi
+
+# Parse options
+while [[ "$1" == "-"* ]]; do
+    case "$1" in
+        -w|--open-web)
+            OPEN_WEB=true
+            ;;
+        -*)
+            echo "Unknown option: $1"
+            usage
+            ;;
+    esac
+    shift
+done
+
+# Default port forwarding if none provided and -w is used
+if [[ $# -eq 0 && "$OPEN_WEB" == "true" ]]; then
+    set -- "8443"
 fi
 
 # Start VM if it's not running
@@ -76,5 +102,23 @@ if [ -n "$FORWARD_ARGS" ]; then
 else
     echo "🔗 Connecting to $GUEST_USER@$GUEST_IP..."
 fi
+
+# Open browser if -w flag is set
+if [[ "$OPEN_WEB" == "true" && -n "$FORWARD_ARGS" ]]; then
+    # Extract the host port from FORWARD_ARGS
+    HOST_PORT=$(echo "$FORWARD_ARGS" | grep -oE '[0-9]+:localhost:[0-9]+' | head -1 | cut -d: -f1)
+    HOSTNAME_LOCAL=$(hostname).local
+    BROWSER_URL="https://${HOSTNAME_LOCAL}:${HOST_PORT}"
+    
+    echo "🌐 Opening browser to $BROWSER_URL..."
+    if command -v xdg-open &>/dev/null; then
+        xdg-open "$BROWSER_URL" &>/dev/null &
+    elif command -v open &>/dev/null; then
+        open "$BROWSER_URL" &>/dev/null &
+    else
+        print_warn "Could not detect browser opener. Please open $BROWSER_URL manually."
+    fi
+fi
+
 ssh -o ConnectTimeout=5 $FORWARD_ARGS "$GUEST_USER@$GUEST_IP"
 
