@@ -160,40 +160,55 @@ fi
 echo ""
 print_info "=== SSH Configuration ==="
 
-SSH_KEY_PATH=$(prompt "SSH key path (leave empty to create new)" "")
-if [[ -z "$SSH_KEY_PATH" ]]; then
-    print_info "Creating new SSH key..."
-    SSH_KEY_PATH="$HOME/.ssh/id_ed25519"
-    if [[ -f "$SSH_KEY_PATH" ]]; then
-        if prompt_yes_no "Key already exists at $SSH_KEY_PATH. Use it?" "yes"; then
-            :
-        else
-            SSH_KEY_PATH=$(prompt "Enter new key path" "$HOME/.ssh/id_ed25519")
-        fi
-    else
-        ssh-keygen -t ed25519 -f "$SSH_KEY_PATH" -N ""
-    fi
-fi
-
-if [[ ! -f "${SSH_KEY_PATH}.pub" ]]; then
-    print_error "Public key not found: ${SSH_KEY_PATH}.pub"
-    exit 1
-fi
-
-print_info "Copying SSH key to VM..."
 GUEST_USER=$(prompt "VM username" "aibox")
 
-ssh-copy-id -i "${SSH_KEY_PATH}.pub" -o ConnectTimeout=10 "${GUEST_USER}@${GUEST_IP}" 2>/dev/null || {
-    print_error "Failed to copy SSH key. Make sure you can connect with password."
-    exit 1
-}
-print_success "SSH key configured!"
+# Check if SSH key auth already works
+print_info "Checking if SSH key authentication is already configured..."
+SSH_KEY_PATH="$HOME/.ssh/id_ed25519"
 
-print_info "Verifying SSH key authentication..."
-if ssh -t -o ConnectTimeout=10 -o PasswordAuthentication=no "$GUEST_USER@$GUEST_IP" "echo 'SSH key auth works!'" &>/dev/null; then
-    print_success "SSH key authentication verified!"
+if [[ -f "$SSH_KEY_PATH" && -f "${SSH_KEY_PATH}.pub" ]]; then
+    if ssh -o ConnectTimeout=5 -o PasswordAuthentication=no "$GUEST_USER@$GUEST_IP" "echo 'SSH key auth works!'" &>/dev/null; then
+        print_success "SSH key authentication already configured!"
+    else
+        # Need to configure SSH key
+        print_info "SSH key not configured. Setting up now..."
+        
+        if [[ -z "$SSH_KEY_PATH" ]]; then
+            print_info "Creating new SSH key..."
+            SSH_KEY_PATH="$HOME/.ssh/id_ed25519"
+            if [[ -f "$SSH_KEY_PATH" ]]; then
+                if prompt_yes_no "Key already exists at $SSH_KEY_PATH. Use it?" "yes"; then
+                    :
+                else
+                    SSH_KEY_PATH=$(prompt "Enter new key path" "$HOME/.ssh/id_ed25519")
+                fi
+            else
+                ssh-keygen -t ed25519 -f "$SSH_KEY_PATH" -N ""
+            fi
+        fi
+
+        if [[ ! -f "${SSH_KEY_PATH}.pub" ]]; then
+            print_error "Public key not found: ${SSH_KEY_PATH}.pub"
+            exit 1
+        fi
+
+        print_info "Copying SSH key to VM..."
+        ssh-copy-id -i "${SSH_KEY_PATH}.pub" -o ConnectTimeout=10 "${GUEST_USER}@${GUEST_IP}" 2>/dev/null || {
+            print_error "Failed to copy SSH key. Make sure you can connect with password."
+            exit 1
+        }
+        print_success "SSH key configured!"
+
+        print_info "Verifying SSH key authentication..."
+        if ssh -t -o ConnectTimeout=10 -o PasswordAuthentication=no "$GUEST_USER@$GUEST_IP" "echo 'SSH key auth works!'" &>/dev/null; then
+            print_success "SSH key authentication verified!"
+        else
+            print_error "SSH key authentication failed. Please check and try again."
+            exit 1
+        fi
+    fi
 else
-    print_error "SSH key authentication failed. Please check and try again."
+    print_error "No SSH key found at $SSH_KEY_PATH. Please create one first."
     exit 1
 fi
 
