@@ -214,6 +214,8 @@ trap "rm -rf $TEMP_DIR" EXIT
 
 ## Git Conventions
 
+- **ALWAYS ask for permission before creating commits**
+- never commit without explicit user approval
 - Use gitmoji for commits: ✨ (feat), 🔧 (fix), 📝 (docs), ♻️ (refactor)
 - Write descriptive commit messages
 - Keep commits atomic and focused

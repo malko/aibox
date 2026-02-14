@@ -2,7 +2,25 @@
 
 Scripts for managing an AI development virtual machine and integrating with LM Studio.
 
-## Setup
+## Quick Setup (Automated)
+
+Run the automated setup script from your host machine:
+
+```bash
+./guest_install.sh
+```
+
+This script will:
+1. Create or verify your VM
+2. Configure SSH key authentication
+3. Install all dependencies in the VM
+4. Configure LLM servers (Ollama/LM Studio)
+5. Set up git share with host (virtiofs)
+6. Install opencode-web as a systemd service
+
+## Manual Setup
+
+If you prefer to set up manually, follow these steps:
 
 ### Host Machine (your computer)
 
@@ -153,7 +171,36 @@ systemctl --user restart opencode-web.service
 journalctl --user -u opencode-web.service -f
 ```
 
+### `guest_install.sh` (run from host)
+
+Fully automated VM setup script that configures everything from the host machine.
+
+**Features:**
+- Creates VM if it doesn't exist (with virt-install)
+- Configures SSH key authentication
+- Verifies key-based login before disabling password auth
+- Installs all dependencies (nvm, node, opencode)
+- Configures LLM servers using host hostname (.local)
+- Sets up git share with host via virtiofs
+- Installs opencode-web systemd service
+
+**Usage:**
+```bash
+./guest_install.sh
+```
+
+**What it does:**
+1. Prompts for VM name (default: aibox)
+2. Creates VM if needed or verifies existing one
+3. Configures SSH keys and disables password auth
+4. Installs dependencies in VM via SSH
+5. Creates ~/git and ~/scripts directories
+6. Initializes opencode.json with LLM providers
+7. Configures virtiofs share if requested
+8. Uploads scripts to VM and installs service
+
 ## Notes
 
 - VM name and guest user are hardcoded in `aibox.sh`—edit the script to customize
-- LM Studio URL is configured in `update-opencode-models.sh` (currently `http://desk.home:1234`)
+- LLM server URLs use host hostname with `.local` suffix (e.g., `hostname.local:1234`)
+- The guest_install.sh script automates all manual setup steps
