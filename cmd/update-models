@@ -1,0 +1,22 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
+
+VM_NAME="ai-agentbox"
+GUEST_USER="malko"
+
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+fi
+
+GUEST_IP=$(virsh domifaddr "$VM_NAME" --source lease 2>/dev/null | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)
+
+if [[ -z "$GUEST_IP" ]]; then
+    echo "Error: Could not detect VM IP. Is the VM running?"
+    exit 1
+fi
+
+echo "Updating OpenCode models on VM..."
+ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/update-opencode-models.sh"

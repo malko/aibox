@@ -16,6 +16,7 @@ usage() {
     echo "  service-add <name> <port[:port]>    Add a service"
     echo "  service-remove <name>              Remove a service"
     echo "  service-list                       List configured services"
+    echo "  update-models                     Update OpenCode models from LLM providers"
     echo "  shutdown [-f]                     Shutdown VM (use -f to force)"
     echo "  snapshot create [name]             Create snapshot"
     echo "  snapshot list                      List snapshots"
@@ -25,11 +26,9 @@ usage() {
     echo "Examples:"
     echo "  $0                                Connect with all services"
     echo "  $0 service-add opencode 4096     Add opencode service"
+    echo "  $0 update-models                 Update OpenCode models"
     echo "  $0 shutdown                       Gracefully shutdown VM"
-    echo "  $0 shutdown -f                    Force shutdown VM"
     echo "  $0 snapshot create                Create snapshot with auto name"
-    echo "  $0 snapshot list                  List all snapshots"
-    echo "  $0 snapshot revert my-snapshot    Revert to snapshot"
     echo ""
     echo "Options:"
     echo "  -w, --open-web  Open browser after connecting"
@@ -59,6 +58,10 @@ case "$1" in
         ;;
     service-list)
         "$CMD_DIR/service-list"
+        exit $?
+        ;;
+    update-models)
+        "$CMD_DIR/update-models"
         exit $?
         ;;
     shutdown)
