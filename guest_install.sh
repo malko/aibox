@@ -229,22 +229,22 @@ fi
 echo ""
 print_info "=== Installing Dependencies in VM ==="
 
-ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'EOF'
+ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
 set -e
 
 echo "Updating packages..."
-sudo apt update
-sudo apt install -y curl jq netcat-openbsd git
+echo "$SUDO_PASSWORD" | sudo -S apt update
+echo "$SUDO_PASSWORD" | sudo -S apt install -y curl jq netcat-openbsd git
 
-if ! command -v nvm &>/dev/null && [ ! -d "$HOME/.nvm" ]; then
+if ! command -v nvm &>/dev/null && [ ! -d "\$HOME/.nvm" ]; then
     echo "Installing nvm..."
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    export NVM_DIR="\$HOME/.nvm"
+    [ -s "\$NVM_DIR/nvm.sh" ] && \. "\$NVM_DIR/nvm.sh"
 fi
 
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+export NVM_DIR="\$HOME/.nvm"
+[ -s "\$NVM_DIR/nvm.sh" ] && \. "\$NVM_DIR/nvm.sh"
 
 if ! command -v node &>/dev/null; then
     echo "Installing Node.js..."
@@ -280,24 +280,24 @@ echo ""
 print_info "=== MOTD Configuration ==="
 
 if prompt_yes_no "Set AIBOX logo as MOTD (Message of the Day)?" "yes"; then
-    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'MOTDEOF'
+    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << MOTDEOF
 set -e
 
-sudo tee /etc/profile.d/motd.sh > /dev/null << 'MOTD'
+echo "$SUDO_PASSWORD" | sudo -S tee /etc/profile.d/motd.sh > /dev/null << 'MOTD'
 #!/bin/sh
 echo ""
 echo "       d8888 d8b 888888b.                    "
 echo "      d88888 Y8P 888  "88b                   "
 echo "     d88P888     888  .88P                   "
 echo "    d88P 888 888 8888888K.   .d88b.  888  888"
-echo "   d88P  888 888 888  "Y88b d88""88b `Y8bd8P'"
+echo "   d88P  888 888 888  "Y88b d88""88b \`Y8bd8P'"
 echo "  d88P   888 888 888    888 888  888   X88K  "
 echo " d8888888888 888 888   d88P Y88..88P .d8""8b."
 echo "d88P     888 888 8888888P"   "Y88P"  888  888"
 echo ""
 MOTD
 
-sudo chmod +x /etc/profile.d/motd.sh
+echo "$SUDO_PASSWORD" | sudo -S chmod +x /etc/profile.d/motd.sh
 
 echo "MOTD configured!"
 MOTDEOF
@@ -322,15 +322,15 @@ echo ""
 print_info "=== Docker Installation ==="
 
 if prompt_yes_no "Install Docker and Nginx Proxy Manager?" "yes"; then
-    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'DOCKEREOF'
+    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << DOCKEREOF
 set -e
 
 echo "Installing Docker..."
 if ! command -v docker &>/dev/null; then
     curl -fsSL https://get.docker.com -o get-docker.sh
-    sudo sh get-docker.sh
+    echo "$SUDO_PASSWORD" | sudo -S sh get-docker.sh
     rm get-docker.sh
-    sudo usermod -aG docker "$USER"
+    echo "$SUDO_PASSWORD" | sudo -S usermod -aG docker "\$USER"
 fi
 
 echo "Docker installed!"
@@ -609,18 +609,18 @@ fi
 
 if [[ "$VIRTIOFS_SHARE" == "true" ]]; then
     print_info "Configuring virtiofs mount in VM..."
-    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'VMEOF'
+    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << VMEOF
 set -e
 
 # Add virtiofs to fstab
 if ! grep -q "git-share" /etc/fstab; then
-    echo "git-share /home/$USER/git virtiofs defaults,x-guest 0 0" | sudo tee -a /etc/fstab
+    echo "git-share /home/\$USER/git virtiofs defaults,x-guest 0 0" | echo "$SUDO_PASSWORD" | sudo -S tee -a /etc/fstab
 fi
 
-sudo mkdir -p /home/$USER/git
-sudo chown $USER:$USER /home/$USER/git
+echo "$SUDO_PASSWORD" | sudo -S mkdir -p /home/\$USER/git
+echo "$SUDO_PASSWORD" | sudo -S chown \$USER:\$USER /home/\$USER/git
 
-sudo mount -a || true
+echo "$SUDO_PASSWORD" | sudo -S mount -a || true
 
 echo "Virtiofs mount configured!"
 VMEOF
