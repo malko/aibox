@@ -190,7 +190,7 @@ ssh-copy-id -i "${SSH_KEY_PATH}.pub" -o ConnectTimeout=10 "${GUEST_USER}@${GUEST
 print_success "SSH key configured!"
 
 print_info "Verifying SSH key authentication..."
-if ssh -o ConnectTimeout=10 -o PasswordAuthentication=no "$GUEST_USER@$GUEST_IP" "echo 'SSH key auth works!'" &>/dev/null; then
+if ssh -t -o ConnectTimeout=10 -o PasswordAuthentication=no "$GUEST_USER@$GUEST_IP" "echo 'SSH key auth works!'" &>/dev/null; then
     print_success "SSH key authentication verified!"
 else
     print_error "SSH key authentication failed. Please check and try again."
@@ -200,7 +200,7 @@ fi
 if prompt_yes_no "Disable password authentication in VM?" "yes"; then
     print_info "Disabling password authentication..."
     
-    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'EOF'
+    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'EOF'
 sudo sed -i 's/^#*PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
 sudo sed -i 's/^#*PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
 sudo systemctl restart sshd
@@ -211,7 +211,7 @@ fi
 echo ""
 print_info "=== Installing Dependencies in VM ==="
 
-ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'EOF'
+ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'EOF'
 set -e
 
 echo "Updating packages..."
@@ -247,7 +247,7 @@ print_success "Dependencies installed!"
 echo ""
 print_info "=== Git Configuration ==="
 
-ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
+ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
 set -e
 
 git config --global user.name "${GUEST_USER}-aibox"
@@ -262,7 +262,7 @@ echo ""
 print_info "=== MOTD Configuration ==="
 
 if prompt_yes_no "Set AIBOX logo as MOTD (Message of the Day)?" "yes"; then
-    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'MOTDEOF'
+    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'MOTDEOF'
 set -e
 
 sudo tee /etc/profile.d/motd.sh > /dev/null << 'MOTD'
@@ -289,7 +289,7 @@ fi
 echo ""
 print_info "=== Git Directory Setup ==="
 
-ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
+ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
 set -e
 
 mkdir -p ~/git
@@ -304,7 +304,7 @@ echo ""
 print_info "=== Docker Installation ==="
 
 if prompt_yes_no "Install Docker and Nginx Proxy Manager?" "yes"; then
-    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'DOCKEREOF'
+    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'DOCKEREOF'
 set -e
 
 echo "Installing Docker..."
@@ -339,7 +339,7 @@ DOCKEREOF
     done
 
     print_info "Setting up NPM data directory..."
-    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
+    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
 set -e
 
 mkdir -p ~/npm-data
@@ -349,7 +349,7 @@ echo "NPM data directory created!"
 EOF
 
     print_info "Creating docker-compose.yml for NPM..."
-    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'NPMEOF'
+    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'NPMEOF'
 set -e
 
 cat > ~/docker/docker-compose.yml << 'YAML'
@@ -374,7 +374,7 @@ echo "docker-compose.yml created!"
 NPMEOF
 
     print_info "Starting NPM container..."
-    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'NPMEOF'
+    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'NPMEOF'
 set -e
 
 cd ~/docker
@@ -402,7 +402,7 @@ NPMEOF
     NPM_DEFAULT_PASSWORD="$NPM_AUTH_PASSWORD"
 
     print_info "Configuring NPM..."
-    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
+    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
 set -e
 
 cd ~/docker
@@ -511,7 +511,7 @@ if prompt_yes_no "Configure LM Studio server?" "no"; then
 fi
 
 if [[ "$CONFIGURE_LLM" == "true" ]]; then
-    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
+    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
 set -e
 
 mkdir -p "$OPENCODE_CONFIG_DIR"
@@ -520,7 +520,7 @@ EOF
 
     if [[ -n "$OLLAMA_URL" ]]; then
         print_info "Adding Ollama provider to opencode config..."
-        ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
+        ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
 set -e
 
 jq '.provider += {
@@ -536,7 +536,7 @@ EOF
 
     if [[ -n "$LMS_URL" ]]; then
         print_info "Adding LM Studio provider to opencode config..."
-        ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
+        ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
 set -e
 
 jq '.provider += {
@@ -591,7 +591,7 @@ fi
 
 if [[ "$VIRTIOFS_SHARE" == "true" ]]; then
     print_info "Configuring virtiofs mount in VM..."
-    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'VMEOF'
+    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'VMEOF'
 set -e
 
 # Add virtiofs to fstab
@@ -615,14 +615,14 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 scp -o ConnectTimeout=10 "$SCRIPTS_DIR/update-opencode-models.sh" "$SCRIPTS_DIR/service_install.sh" "$GUEST_USER@${GUEST_IP}:~/scripts/"
 
-ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "chmod +x ~/scripts/*.sh"
+ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "chmod +x ~/scripts/*.sh"
 
 print_success "Scripts uploaded!"
 
 echo ""
 print_info "=== Installing opencode-web Service ==="
 
-ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "cd ~/scripts && ./service_install.sh"
+ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "cd ~/scripts && ./service_install.sh"
 
 echo ""
 print_warn "=== Setup Complete! ==="
