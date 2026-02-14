@@ -1,7 +1,11 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_SOURCE" ]]; do
+    SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
 CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
 
 VM_NAME="ai-agentbox"
