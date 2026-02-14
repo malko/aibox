@@ -11,12 +11,14 @@ NC='\033[0m'
 print_ascii_logo() {
     echo -e "${CYAN}"
     cat << 'EOF'
- █████╗ ██╗█████╗    █████╗  ██╗   ██╗  
-██╔══██╗╚═╝██╔═██╗  ██╔══██╗ ╚██╗ ██╔╝
-███████║██║███████║██╔╝   ██╗ ╚═██╔═╝
-██╔══██║██║██╔══██║ ██╗  ██╔╝ ██╔═██╗
-██║  ██║██║███████║  █████╔╝ ██╔╝ ╚██╗
-╚═╝  ╚═╝╚═╝╚══════╝  ╚════╝  ╚═╝   ╚═╝
+       d8888 d8b 888888b.                    
+      d88888 Y8P 888  "88b                   
+     d88P888     888  .88P                   
+    d88P 888 888 8888888K.   .d88b.  888  888
+   d88P  888 888 888  "Y88b d88""88b `Y8bd8P'
+  d88P   888 888 888    888 888  888   X88K  
+ d8888888888 888 888   d88P Y88..88P .d8""8b.
+d88P     888 888 8888888P"   "Y88P"  888  888
 EOF
     echo -e "${NC}"
 }
@@ -241,6 +243,48 @@ echo "Dependencies installed!"
 EOF
 
 print_success "Dependencies installed!"
+
+echo ""
+print_info "=== Git Configuration ==="
+
+ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
+set -e
+
+git config --global user.name "${GUEST_USER}-aibox"
+git config --global user.email "${GUEST_USER}@aibox.local"
+
+echo "Git configured!"
+EOF
+
+print_success "Git configured with user: ${GUEST_USER}-aibox"
+
+echo ""
+print_info "=== MOTD Configuration ==="
+
+if prompt_yes_no "Set AIBOX logo as MOTD (Message of the Day)?" "yes"; then
+    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << 'MOTDEOF'
+set -e
+
+sudo tee /etc/profile.d/motd.sh > /dev/null << 'MOTD'
+#!/bin/sh
+echo ""
+echo "       d8888 d8b 888888b.                    "
+echo "      d88888 Y8P 888  "88b                   "
+echo "     d88P888     888  .88P                   "
+echo "    d88P 888 888 8888888K.   .d88b.  888  888"
+echo "   d88P  888 888 888  "Y88b d88""88b `Y8bd8P'"
+echo "  d88P   888 888 888    888 888  888   X88K  "
+echo " d8888888888 888 888   d88P Y88..88P .d8""8b."
+echo "d88P     888 888 8888888P"   "Y88P"  888  888"
+echo ""
+MOTD
+
+sudo chmod +x /etc/profile.d/motd.sh
+
+echo "MOTD configured!"
+MOTDEOF
+    print_success "AIBOX MOTD configured!"
+fi
 
 echo ""
 print_info "=== Git Directory Setup ==="
