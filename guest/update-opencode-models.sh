@@ -173,19 +173,19 @@ main() {
         mv "$TEMP_DIR/config_new.json" "$TEMP_DIR/config.json"
     fi
     
-    # Ensure lms provider exists with proper structure
-    if ! jq -e '.provider.lms' "$TEMP_DIR/config.json" >/dev/null 2>&1; then
-        jq ".provider += {\"lms\": {\"npm\": \"@ai-sdk/openai-compatible\", \"name\": \"LM studio (local)\", \"options\": {\"baseUrl\": \"${LM_STUDIO_URL}/v1\"}, \"models\": {}}}" "$TEMP_DIR/config.json" > "$TEMP_DIR/config_new.json"
+    # Ensure lmstudio provider exists with proper structure
+    if ! jq -e '.provider.lmstudio' "$TEMP_DIR/config.json" >/dev/null 2>&1; then
+        jq ".provider += {\"lmstudio\": {\"npm\": \"@ai-sdk/openai-compatible\", \"name\": \"LM Studio (local)\", \"options\": {\"baseUrl\": \"${LM_STUDIO_URL}/v1\"}, \"models\": {}}}" "$TEMP_DIR/config.json" > "$TEMP_DIR/config_new.json"
         mv "$TEMP_DIR/config_new.json" "$TEMP_DIR/config.json"
     fi
     
     # Replace models section with new data
     local new_models=$(cat "$TEMP_DIR/new_models.json")
-    jq ".provider.lms.models = $new_models" "$TEMP_DIR/config.json" > "$TEMP_DIR/config_new.json"
+    jq ".provider.lmstudio.models = $new_models" "$TEMP_DIR/config.json" > "$TEMP_DIR/config_new.json"
     mv "$TEMP_DIR/config_new.json" "$TEMP_DIR/config.json"
     
     # Count models
-    local final_count=$(jq '.provider.lms.models | keys | length' "$TEMP_DIR/config.json")
+    local final_count=$(jq '.provider.lmstudio.models | keys | length' "$TEMP_DIR/config.json")
     echo -e "\n${GREEN}✅ Configured $final_count models from LM Studio${NC}"
     
     # Save config with backup

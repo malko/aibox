@@ -34,13 +34,13 @@ if [ "$NVM_SOURCED" = true ]; then
 #!/bin/bash
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-exec opencode web
+exec opencode web --hostname 0.0.0.0
 EOFWRAPPER
     echo "==> Wrapper created with NVM support"
 else
     cat > "$WRAPPER_SCRIPT" << 'EOFWRAPPER'
 #!/bin/bash
-exec opencode web
+exec opencode web --hostname 0.0.0.0
 EOFWRAPPER
     echo "==> Wrapper created without NVM"
 fi
