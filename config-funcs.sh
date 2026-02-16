@@ -4,9 +4,9 @@ get_config() {
     local key="$1"
     local default="$2"
     local value
-    
+
     value="${!key}"
-    
+
     if [[ -z "$value" && -n "$default" ]]; then
         echo "$default"
     elif [[ -n "$value" ]]; then
@@ -21,17 +21,17 @@ prompt_config() {
     local prompt_text="$2"
     local default="$3"
     local result
-    
+
     local current_value
     current_value=$(get_config "$key" "$default")
-    
+
     if [[ -n "$current_value" ]]; then
         read -p "$prompt_text [$current_value]: " result
         result="${result:-$current_value}"
     else
         read -p "$prompt_text: " result
     fi
-    
+
     echo "$result"
 }
 
@@ -41,9 +41,9 @@ prompt_config_yes_no() {
     local default="$3"
     local current_value
     local result
-    
+
     current_value=$(get_config "$key" "$default")
-    
+
     while true; do
         if [[ "$current_value" == "yes" || "$current_value" == "y" ]]; then
             read -p "$prompt_text [Y/n]: " result
@@ -62,11 +62,9 @@ prompt_config_yes_no() {
 save_config() {
     local key="$1"
     local value="$2"
-    
-    if [[ -z "$CONFIG_FILE" ]]; then
-        return
-    fi
-    
+
+    mkdir -p "$(dirname "$CONFIG_FILE")"
+
     if [[ -n "$key" && -n "$value" ]]; then
         if grep -qE "^${key}=" "$CONFIG_FILE" 2>/dev/null; then
             sed -i "s|^${key}=.*|${key}=\"${value}\"|" "$CONFIG_FILE"
@@ -80,11 +78,11 @@ init_config_file() {
     local config_dir
     config_dir=$(dirname "$CONFIG_FILE")
     mkdir -p "$config_dir"
-    
+
     if [[ ! -f "$CONFIG_FILE" ]]; then
         touch "$CONFIG_FILE"
     fi
-    
+
     if [[ -f "$CONFIG_FILE" ]]; then
         source "$CONFIG_FILE"
     fi

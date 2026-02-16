@@ -21,7 +21,7 @@ echo ""
 
 VM_NAME="${1:-$(prompt "VM name" "aibox")}"
 
-if virsh dominfo "$VM_NAME" &>/dev/null; then
+if virsh -c "$LIBVIRT_DEFAULT_URI" dominfo "$VM_NAME" &>/dev/null; then
     print_error "VM '$VM_NAME' already exists."
     exit 1
 fi
@@ -38,7 +38,7 @@ NETWORK=$(prompt "Network" "default")
 print_info "Creating VM '$VM_NAME'..."
 
 # TODO check for default network or try to create if from virsh net-define /usr/share/libvirt/networks/default.xml
-virsh net-info default >/dev/null 2>&1 || echo "Erreur: Le réseau 'default' n'existe pas."
+virsh -c "$LIBVIRT_DEFAULT_URI" net-info default >/dev/null 2>&1 || echo "Erreur: Le réseau 'default' n'existe pas."
 if [ "$(virsh -c "$LIBVIRT_DEFAULT_URI" net-info default | grep 'Active' | awk '{print $2}')" = "no" ]; then
     virsh -c "$LIBVIRT_DEFAULT_URI" net-start default
     echo "Réseau 'default' démarré."

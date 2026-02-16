@@ -1,14 +1,18 @@
 #!/bin/bash
 set -e
 
+CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
 source "$(dirname "$0")/../shared-funcs.sh"
+source "$(dirname "$0")/../config-funcs.sh"
+init_config_file
 
 check_command virsh
 
-VM_NAME="${1:-aibox}"
+VM_NAME="${1:-$(get_config "VM_NAME" "aibox")}"
 MAX_WAIT="${2:-30}"
+LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 
-VM_STATE=$(virsh domstate "$VM_NAME" 2>/dev/null || echo "unknown")
+VM_STATE=$(virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null || echo "unknown")
 
 NEEDS_BOOT=false
 
@@ -16,7 +20,7 @@ if [[ "$VM_STATE" == "running" ]]; then
     print_info "VM '$VM_NAME' is already running"
 elif [[ "$VM_STATE" == "shut off" || "$VM_STATE" == "paused" ]]; then
     print_info "Starting VM '$VM_NAME'..."
-    virsh start "$VM_NAME"
+    virsh -c "$LIBVIRT_DEFAULT_URI" start "$VM_NAME"
     NEEDS_BOOT=true
 else
     print_error "VM '$VM_NAME' is in state: $VM_STATE"
@@ -40,7 +44,7 @@ elif [[ "$NEEDS_BOOT" == "true" ]]; then
 fi
 
 for i in {1..15}; do
-    GUEST_IP=$(virsh domifaddr "$VM_NAME" --source lease 2>/dev/null | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)
+    GUEST_IP=$(virsh -c "$LIBVIRT_DEFAULT_URI" domifaddr "$VM_NAME" --source lease 2>/dev/null | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)
     if [[ -n "$GUEST_IP" ]]; then
         break
     fi

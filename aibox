@@ -7,9 +7,11 @@ while [[ -L "$SCRIPT_SOURCE" ]]; do
 done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 CMD_DIR="$SCRIPT_DIR/cmd"
+CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
 
 source "$SCRIPT_DIR/shared-funcs.sh"
 source "$SCRIPT_DIR/config-funcs.sh"
+init_config_file
 
 # --- CONFIGURATION ---
 VM_NAME=$(get_config "VM_NAME" "aibox")
@@ -174,7 +176,7 @@ case "$1" in
         exit $?
         ;;
     update-models)
-        "$CMD_DIR/update-models"
+        "$CMD_DIR/update-models" "$VM_NAME" "$GUEST_USER"
         exit $?
         ;;
     shutdown)
@@ -224,16 +226,16 @@ else
 fi
 
 # Start VM if it's not running
-VM_STATE=$(virsh domstate "$VM_NAME" 2>/dev/null)
+VM_STATE=$(virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null)
 if [ "$VM_STATE" != "running" ]; then
     echo "Starting $VM_NAME..."
-    virsh start "$VM_NAME"
+    virsh -c "$LIBVIRT_DEFAULT_URI" start "$VM_NAME"
 fi
 
 # Dynamic IP Detection
 echo -n "Detecting Guest IP..."
 for i in {1..20}; do
-    GUEST_IP=$(virsh domifaddr "$VM_NAME" --source lease | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)
+    GUEST_IP=$(virsh -c "$LIBVIRT_DEFAULT_URI" domifaddr "$VM_NAME" --source lease | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)
     if [ -n "$GUEST_IP" ]; then
         break
     fi

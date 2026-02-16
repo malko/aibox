@@ -6,8 +6,10 @@ while [[ -L "$SCRIPT_SOURCE" ]]; do
     SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"
 done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
+source "$SCRIPT_DIR/config-funcs.sh"
 
-VM_NAME="ai-agentbox"
+VM_NAME=$(get_config "VM_NAME" "aibox")
+LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 ACTION="${1:-}"
 SNAPSHOT_NAME="${2:-}"
 
@@ -24,9 +26,9 @@ load_config() {
 save_config() {
     local key="$1"
     local value="$2"
-    
+
     mkdir -p "$(dirname "$CONFIG_FILE")"
-    
+
     if [[ -n "$key" && -n "$value" ]]; then
         if grep -qE "^${key}=" "$CONFIG_FILE" 2>/dev/null; then
             sed -i "s|^${key}=.*|${key}=\"${value}\"|" "$CONFIG_FILE"
@@ -55,12 +57,12 @@ prompt_snapshot_dir() {
 }
 
 vm_state() {
-    virsh domstate "$VM_NAME" 2>/dev/null || echo "unknown"
+    virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null || echo "unknown"
 }
 
 check_virtiofs() {
     # Check if VM has filesystem (virtiofs) configured
-    if virsh dominfo "$VM_NAME" 2>/dev/null | grep -q "Filesystem"; then
+    if virsh -c "$LIBVIRT_DEFAULT_URI" dominfo "$VM_NAME" 2>/dev/null | grep -q "Filesystem"; then
         return 0  # Has virtiofs
     fi
     return 1  # No virtiofs
@@ -69,18 +71,18 @@ check_virtiofs() {
 case "$ACTION" in
     list)
         echo "Snapshots for VM '$VM_NAME':"
-        virsh snapshot-list "$VM_NAME" --name 2>/dev/null || echo "No snapshots found."
+        virsh -c "$LIBVIRT_DEFAULT_URI" snapshot-list "$VM_NAME" --name 2>/dev/null || echo "No snapshots found."
         ;;
-    
+
     create)
         if [[ -z "$SNAPSHOT_NAME" ]]; then
             SNAPSHOT_NAME="aibox-$(date +%Y%m%d-%H%M%S)"
         fi
-        
+
         load_config
         prompt_snapshot_dir
         ensure_snapshot_dir
-        
+
         STATE=$(vm_state)
         if [[ "$STATE" == "running" ]]; then
             if check_virtiofs; then
@@ -95,56 +97,56 @@ case "$ACTION" in
                 fi
             fi
         fi
-        
+
         echo "Creating snapshot '$SNAPSHOT_NAME'..."
-        virsh snapshot-create-as "$VM_NAME" "$SNAPSHOT_NAME" \
+        virsh -c "$LIBVIRT_DEFAULT_URI" snapshot-create-as "$VM_NAME" "$SNAPSHOT_NAME" \
             --disk-only=no \
             --atomic 2>/dev/null || {
             echo "Failed to create snapshot. Try shutting down the VM first."
             exit 1
         }
-        
+
         echo "Snapshot '$SNAPSHOT_NAME' created successfully."
         ;;
-    
+
     delete)
         if [[ -z "$SNAPSHOT_NAME" ]]; then
             echo "Usage: $0 delete <snapshot-name>"
             exit 1
         fi
-        
+
         echo "Deleting snapshot '$SNAPSHOT_NAME'..."
-        virsh snapshot-delete "$VM_NAME" "$SNAPSHOT_NAME" --metadata 2>/dev/null || \
-            virsh snapshot-delete "$VM_NAME" "$SNAPSHOT_NAME"
-        
+        virsh -c "$LIBVIRT_DEFAULT_URI" snapshot-delete "$VM_NAME" "$SNAPSHOT_NAME" --metadata 2>/dev/null || \
+            virsh -c "$LIBVIRT_DEFAULT_URI" snapshot-delete "$VM_NAME" "$SNAPSHOT_NAME"
+
         echo "Snapshot '$SNAPSHOT_NAME' deleted."
         ;;
-    
+
     revert)
         if [[ -z "$SNAPSHOT_NAME" ]]; then
             echo "Usage: $0 revert <snapshot-name>"
             exit 1
         fi
-        
+
         STATE=$(vm_state)
         if [[ "$STATE" == "running" ]]; then
             echo "VM is running. Shutting down before reverting..."
-            virsh shutdown "$VM_NAME"
+            virsh -c "$LIBVIRT_DEFAULT_URI" shutdown "$VM_NAME"
             for i in {1..30}; do
                 STATE=$(vm_state)
                 [[ "$STATE" == "shut off" ]] && break
                 sleep 1
             done
         fi
-        
+
         echo "Reverting to snapshot '$SNAPSHOT_NAME'..."
-        virsh snapshot-revert "$VM_NAME" "$SNAPSHOT_NAME"
-        
+        virsh -c "$LIBVIRT_DEFAULT_URI" snapshot-revert "$VM_NAME" "$SNAPSHOT_NAME"
+
         echo ""
         echo "VM reverted to '$SNAPSHOT_NAME'."
         echo "Run './aibox start' to restart the VM."
         ;;
-    
+
     *)
         echo "Usage: $0 <command> [options]"
         echo ""

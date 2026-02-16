@@ -49,11 +49,13 @@ print_info "Host detected: $HOSTNAME_LOCAL"
 print_info "Config file: $CONFIG_FILE"
 echo ""
 
+LIBVIRT_DEFAULT_URI=$(prompt_config "LIBVIRT_DEFAULT_URI" "Libvirt URI" "qemu:///system")
+save_config "LIBVIRT_DEFAULT_URI" "$LIBVIRT_DEFAULT_URI"
 VM_NAME=$(prompt_config "VM_NAME" "VM name" "aibox")
 save_config "VM_NAME" "$VM_NAME"
 print_info "Checking if VM '$VM_NAME' exists..."
 
-if ! virsh dominfo "$VM_NAME" &>/dev/null; then
+if ! virsh -c "$LIBVIRT_DEFAULT_URI" dominfo "$VM_NAME" &>/dev/null; then
     print_warn "VM '$VM_NAME' does not exist."
 
     CREATE_VM=$(prompt_config_yes_no "CREATE_VM" "Do you want to create a new VM?" "yes")
