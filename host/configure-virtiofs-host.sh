@@ -31,13 +31,17 @@ if echo "$DOMAIN_XML" | grep -q "filesystem"; then
     exit 0
 fi
 
+print_info "Activating shared memory as it is mandatory for virtiofs..."
+virt-xml "$VM_NAME" --edit --memorybacking access.mode=shared,source.type=memfd
+
 print_info "Adding filesystem to VM..."
-virsh attach-device "$VM_NAME" --persistent --file - <<EOF
+virsh attach-device "$VM_NAME" --persistent --file /dev/stdin <<EOF
 <filesystem type="mount" accessmode="passthrough">
+  <driver type='virtiofs'/>
   <source dir="$HOST_SHARE_DIR"/>
-  <target dir="git-share"/>
+  <target dir="gitshare"/>
 </filesystem>
 EOF
 
+
 print_success "Virtiofs configured on host!"
-print_info "Now run guest/configure-virtiofs-guest.sh inside the VM to complete setup."

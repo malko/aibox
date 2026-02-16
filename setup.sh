@@ -55,10 +55,10 @@ print_info "Checking if VM '$VM_NAME' exists..."
 
 if ! virsh dominfo "$VM_NAME" &>/dev/null; then
     print_warn "VM '$VM_NAME' does not exist."
-    
+
     CREATE_VM=$(prompt_config_yes_no "CREATE_VM" "Do you want to create a new VM?" "yes")
     save_config "CREATE_VM" "$CREATE_VM"
-    
+
     if [[ "$CREATE_VM" == "yes" ]]; then
         "$SCRIPT_DIR/host/create-vm.sh" "$VM_NAME"
         exit 0
@@ -175,15 +175,15 @@ if [[ "$CONFIGURE_OLLAMA" == "yes" || "$CONFIGURE_LMS" == "yes" ]]; then
         save_config "OLLAMA_URL" "$OLLAMA_URL"
         ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/configure-llm.sh ollama $OLLAMA_URL"
     fi
-    
+
     if [[ "$CONFIGURE_LMS" == "yes" ]]; then
         LMS_URL=$(prompt_config "LMS_URL" "LM Studio URL" "http://${HOSTNAME_LOCAL}:1234")
         save_config "LMS_URL" "$LMS_URL"
         ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/configure-llm.sh lms $LMS_URL"
     fi
-    
+
     print_success "LLM providers configured!"
-    
+
     ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/update-opencode-models.sh"
     print_success "OpenCode models updated!"
 fi
@@ -196,39 +196,20 @@ save_config "CONFIGURE_VIRTIOFS" "$CONFIGURE_VIRTIOFS"
 if [[ "$CONFIGURE_VIRTIOFS" == "yes" ]]; then
     HOST_SHARE_DIR=$(prompt_config "HOST_SHARE_DIR" "Host directory to share" "$HOME/git")
     save_config "HOST_SHARE_DIR" "$HOST_SHARE_DIR"
-    mkdir -p "$HOST_SHARE_DIR"
-    
-    virsh shutdown "$VM_NAME" 2>/dev/null || true
-    sleep 3
-    
-    DOMAIN_XML=$(virsh dumpxml "$VM_NAME")
-    if ! echo "$DOMAIN_XML" | grep -q "filesystem"; then
-        virsh attach-device "$VM_NAME" --persistent --file - <<EOF
-<filesystem type="mount" accessmode="passthrough">
-  <source dir="$HOST_SHARE_DIR"/>
-  <target dir="git-share"/>
-</filesystem>
-EOF
-    fi
-    
-    virsh start "$VM_NAME" 2>/dev/null || true
-    sleep 5
-    
-    for i in {1..30}; do
-        GUEST_IP_NEW=$(virsh domifaddr "$VM_NAME" --source lease 2>/dev/null | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)
-        if [[ -n "$GUEST_IP_NEW" ]]; then
-            break
-        fi
-        sleep 2
-    done
-    
-    ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP_NEW" "set -e
-if ! grep -q 'git-share' /etc/fstab; then
-    echo 'git-share /home/$USER/git virtiofs defaults,x-guest 0 0' | sudo tee -a /etc/fstab
+
+    "$SCRIPT_DIR/host/configure-virtiofs-host.sh" "$VM_NAME" "$HOST_SHARE_DIR"
+
+    "$SCRIPT_DIR/host/start-vm.sh" "$VM_NAME"
+
+    ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "set -e
+if ! grep -q 'gitshare' /etc/fstab; then
+    echo 'gitshare /home/$GUEST_USER/git virtiofs defaults,x-guest 0 0' | sudo tee -a /etc/fstab
 fi
 
-sudo mkdir -p /home/$USER/git
-sudo chown \$USER:\$USER /home/$USER/git
+sudo mkdir -p /home/$GUEST_USER/git
+sudo chown $GUEST_USER:$GUEST_USER /home/$GUEST_USER/git
+
+sudo systemctl daemon-reload
 
 sudo mount -a || true
 
@@ -247,29 +228,29 @@ save_config "ADD_TO_PATH" "$ADD_TO_PATH"
 if [[ "$ADD_TO_PATH" == "yes" ]]; then
     SCRIPT_DIR_ABS="$(cd "$SCRIPT_DIR" && pwd)"
     BIN_DIR="$HOME/bin"
-    
+
     if [[ ! -d "$BIN_DIR" ]]; then
         mkdir -p "$BIN_DIR"
     fi
-    
+
     ln -sf "$SCRIPT_DIR_ABS/aibox" "$BIN_DIR/aibox"
-    
+
     # Add to PATH in shell rc if not already there
     if ! grep -q 'export PATH="$HOME/bin:$PATH"' "$HOME/.bashrc" 2>/dev/null; then
         echo 'export PATH="$HOME/bin:$PATH"' >> "$HOME/.bashrc"
     fi
-    
+
     print_success "Added 'aibox' to $BIN_DIR/aibox"
     echo "Make sure '$HOME/bin' is in your PATH (added to ~/.bashrc)"
     echo "Run 'source ~/.bashrc' or restart your terminal"
-    
+
     ADD_COMPLETION=$(prompt_config_yes_no "ADD_COMPLETION" "Enable shell completion for aibox?" "yes")
     save_config "ADD_COMPLETION" "$ADD_COMPLETION"
-    
+
     if [[ "$ADD_COMPLETION" == "yes" ]]; then
         # Detect user's shell
         USER_SHELL="${SHELL##*/}"
-        
+
         if [[ "$USER_SHELL" == "zsh" ]]; then
             # Zsh completion - create completion file
             ZSH_COMPLETION_DIR="$HOME/.zsh/completions"
