@@ -175,13 +175,17 @@ if [[ "$CONFIGURE_OLLAMA" == "yes" || "$CONFIGURE_LMS" == "yes" ]]; then
     if [[ "$CONFIGURE_OLLAMA" == "yes" ]]; then
         OLLAMA_URL=$(prompt_config "OLLAMA_URL" "Ollama URL" "http://${HOSTNAME_LOCAL}:11434")
         save_config "OLLAMA_URL" "$OLLAMA_URL"
-        ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/configure-llm.sh ollama $OLLAMA_URL"
+        OLLAMA_TOKEN=$(prompt_config "OLLAMA_TOKEN" "Ollama Token" "")
+        save_config "OLLAMA_TOKEN" "$OLLAMA_TOKEN"
+        ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/configure-llm.sh ollama $OLLAMA_URL $OLLAMA_TOKEN"
     fi
 
     if [[ "$CONFIGURE_LMS" == "yes" ]]; then
         LMS_URL=$(prompt_config "LMS_URL" "LM Studio URL" "http://${HOSTNAME_LOCAL}:1234")
         save_config "LMS_URL" "$LMS_URL"
-        ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/configure-llm.sh lms $LMS_URL"
+        LMS_TOKEN=$(prompt_config "LMS_TOKEN" "LM Studio Token" "")
+        save_config "LMS_TOKEN" "$LMS_TOKEN"
+        ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/configure-llm.sh lms $LMS_URL $LMS_TOKEN"
     fi
 
     print_success "LLM providers configured!"

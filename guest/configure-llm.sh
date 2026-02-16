@@ -15,25 +15,27 @@ fi
 
 if [[ "$1" == "ollama" ]]; then
     OLLAMA_URL="${2:-http://localhost:11434}"
+    OLLAMA_TOKEN="${3:-}"
     print_info "Adding Ollama provider..."
-    
+
     TMP=$(mktemp)
-    jq --arg url "$OLLAMA_URL/v1" \
-       '.provider.ollama = {"npm": "@ai-sdk/openai-compatible", "name": "Ollama (local)", "options": {"baseURL": $url}}' \
+    jq --arg url "$OLLAMA_URL/v1" --arg token "$OLLAMA_TOKEN" \
+       '.provider.ollama = {"npm": "@ai-sdk/openai-compatible", "name": "Ollama (local)", "options": {"baseURL": $url, "token": $token}}' \
        "$OPENCODE_CONFIG_FILE" > "$TMP" && mv "$TMP" "$OPENCODE_CONFIG_FILE"
-    
+
     print_success "Ollama provider added!"
 fi
 
 if [[ "$1" == "lms" ]]; then
     LMS_URL="${2:-http://localhost:1234}"
+    LMS_TOKEN="${3:-}"
     lms_url_full="${LMS_URL}/v1"
     print_info "Adding LM Studio provider..."
-    
+
     TMP=$(mktemp)
-    jq --arg url "$lms_url_full" \
-       '.provider.lmstudio = {"npm": "@ai-sdk/openai-compatible", "name": "LM Studio (local)", "options": {"baseURL": $url}}' \
+    jq --arg url "$lms_url_full" --arg token "$LMS_TOKEN" \
+       '.provider.lmstudio = {"npm": "@ai-sdk/openai-compatible", "name": "LM Studio (local)", "options": {"baseURL": $url, "token": $token}}' \
        "$OPENCODE_CONFIG_FILE" > "$TMP" && mv "$TMP" "$OPENCODE_CONFIG_FILE"
-    
+
     print_success "LM Studio provider added!"
 fi
