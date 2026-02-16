@@ -28,7 +28,7 @@ fi
 
 if ! command -v opencode &>/dev/null; then
     echo "Installing opencode..."
-    npm install -g opencode
+    npm install -g opencode-ai
 fi
 
 echo "Dependencies installed!"
