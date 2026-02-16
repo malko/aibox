@@ -8,9 +8,12 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 CMD_DIR="$SCRIPT_DIR/cmd"
 
+source "$SCRIPT_DIR/shared-funcs.sh"
+source "$SCRIPT_DIR/config-funcs.sh"
+
 # --- CONFIGURATION ---
-VM_NAME="ai-agentbox"
-GUEST_USER="malko"
+VM_NAME=$(get_config "VM_NAME" "aibox")
+GUEST_USER=$(get_config "GUEST_USER" "aibox")
 
 SERVICES_FILE="${HOME}/.config/aibox/services.json"
 
@@ -52,7 +55,7 @@ completion() {
     # Detect shell if not specified
     local shell="${1:-}"
     [[ -z "$shell" ]] && shell="${BASH_VERSION:+bash}${ZSH_VERSION:+zsh}"
-    
+
     if [[ "$shell" == "zsh" ]]; then
         cat << 'ZEOF'
 #compdef aibox
@@ -108,7 +111,7 @@ _aibox() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     opts="service-add service-remove service-list update-models shutdown snapshot"
-    
+
     case "${prev}" in
         aibox)
             COMPREPLY=($(compgen -W "${opts}" -- "${cur}"))
@@ -137,7 +140,7 @@ _aibox() {
             return 0
             ;;
     esac
-    
+
     COMPREPLY=($(compgen -W "${opts}" -- "${cur}"))
     return 0
 }
@@ -254,7 +257,7 @@ for ARG in "$@"; do
         HOST_PORT="$ARG"
         GUEST_PORT="$ARG"
     fi
-    
+
     FORWARD_ARGS="$FORWARD_ARGS -L 0.0.0.0:$HOST_PORT:$GUEST_IP:$GUEST_PORT"
 done
 
@@ -274,7 +277,7 @@ if [[ "$OPEN_WEB" == "true" ]]; then
     HOST_PORT="$1"
     HOSTNAME_LOCAL=$(hostname).local
     BROWSER_URL="http://${HOSTNAME_LOCAL}:${HOST_PORT}"
-    
+
     echo "Opening browser to $BROWSER_URL..."
     if command -v xdg-open &>/dev/null; then
         xdg-open "$BROWSER_URL" &
