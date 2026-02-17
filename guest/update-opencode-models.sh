@@ -41,7 +41,7 @@ fetch_models() {
     local config_url config_token
 
     config_url=$(jq -r ".provider.${provider}.options.baseURL // empty" "$CONFIG_PATH")
-    config_token=$(jq -r ".provider.${provider}.options.token // empty" "$CONFIG_PATH")
+    config_token=$(jq -r ".provider.${provider}.options.headers.Authorization // empty" "$CONFIG_PATH")
 
     if [[ -z "$config_url" ]]; then
         echo -e "${RED}❌ No baseURL found for provider: $provider${NC}" >&2
