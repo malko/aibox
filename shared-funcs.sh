@@ -85,4 +85,21 @@ check_command() {
     fi
 }
 
+check_requirements() {
+    local missing=()
+    local cmd="$1"
+    shift
+    
+    for c in "$cmd"; do
+        if ! command -v "$c" &>/dev/null; then
+            missing+=("$c")
+        fi
+    done
+    
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        print_error "Missing required command(s): ${missing[*]}"
+        exit 1
+    fi
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

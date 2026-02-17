@@ -38,7 +38,7 @@ fi
 
 init_config_file
 
-check_command virsh
+check_requirements virsh jq
 
 print_ascii_logo
 
