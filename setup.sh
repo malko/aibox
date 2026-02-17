@@ -187,7 +187,7 @@ save_config "CONFIGURE_LMS" "$CONFIGURE_LMS"
 
 if [[ "$CONFIGURE_OLLAMA" == "yes" || "$CONFIGURE_LMS" == "yes" ]]; then
     if [[ "$CONFIGURE_OLLAMA" == "yes" ]]; then
-        OLLAMA_URL=$(prompt_config "OLLAMA_URL" "Ollama URL" "http://${HOSTNAME_LOCAL}:11434")
+        OLLAMA_URL=$(prompt_config "OLLAMA_URL" "Ollama URL" "http://aibox-host:11434")
         save_config "OLLAMA_URL" "$OLLAMA_URL"
         OLLAMA_TOKEN=$(prompt_config "OLLAMA_TOKEN" "Ollama Token" "")
         save_config "OLLAMA_TOKEN" "$OLLAMA_TOKEN"
@@ -195,7 +195,7 @@ if [[ "$CONFIGURE_OLLAMA" == "yes" || "$CONFIGURE_LMS" == "yes" ]]; then
     fi
 
     if [[ "$CONFIGURE_LMS" == "yes" ]]; then
-        LMS_URL=$(prompt_config "LMS_URL" "LM Studio URL" "http://${HOSTNAME_LOCAL}:1234")
+        LMS_URL=$(prompt_config "LMS_URL" "LM Studio URL" "http://aibox-host:1234")
         save_config "LMS_URL" "$LMS_URL"
         LMS_TOKEN=$(prompt_config "LMS_TOKEN" "LM Studio Token" "")
         save_config "LMS_TOKEN" "$LMS_TOKEN"
