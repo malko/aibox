@@ -204,7 +204,14 @@ if [[ "$CONFIGURE_OLLAMA" == "yes" || "$CONFIGURE_LMS" == "yes" ]]; then
 
     print_success "LLM providers configured!"
 
-    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/update-opencode-models.sh"
+    if [[ "$CONFIGURE_OLLAMA" == "yes" ]]; then
+        ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/update-opencode-models.sh ollama"
+    fi
+
+    if [[ "$CONFIGURE_LMS" == "yes" ]]; then
+        ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/update-opencode-models.sh lmstudio"
+    fi
+
     print_success "OpenCode models updated!"
 fi
 

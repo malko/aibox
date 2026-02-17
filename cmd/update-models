@@ -11,7 +11,8 @@ source "$SCRIPT_DIR/config-funcs.sh"
 init_config_file
 
 VM_NAME=${1:-$(get_config "VM_NAME" "aibox")}
-GUEST_USER=${2:-$(get_config "GUEST_USER" "aibox")}
+PROVIDER=${2:-$(get_config "PROVIDER" "lmstudio")}
+GUEST_USER=${3:-$(get_config "GUEST_USER" "aibox")}
 LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -25,5 +26,5 @@ if [[ -z "$GUEST_IP" ]]; then
     exit 1
 fi
 
-echo "Updating OpenCode models on VM..."
-ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/update-opencode-models.sh"
+echo "Updating OpenCode models for provider '$PROVIDER' on VM..."
+ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/update-opencode-models.sh $PROVIDER"
