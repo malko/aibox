@@ -7,43 +7,44 @@ while [[ -L "$SCRIPT_SOURCE" ]]; do
 done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 CMD_DIR="$SCRIPT_DIR/cmd"
-CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
 
-source "$SCRIPT_DIR/shared-funcs.sh"
-source "$SCRIPT_DIR/config-funcs.sh"
-init_config_file
-
-# --- CONFIGURATION ---
-VM_NAME=$(get_config "VM_NAME" "aibox")
-GUEST_USER=$(get_config "GUEST_USER" "aibox")
-
-SERVICES_FILE="${HOME}/.config/aibox/services.json"
+# Global options
+CONFIG_FILE=""
+OPEN_WEB=false
+NO_SERVICE=false
+PEON_RELAY=false
+POSITIONAL_ARGS=()
 
 usage() {
     echo "Usage: $0 [options] [service] [host_port:guest_port] [port] ..."
     echo ""
     echo "Commands:"
-    echo "  service-add <name> <port[:port]>    Add a service"
-    echo "  service-remove <name>              Remove a service"
-    echo "  service-list                       List configured services"
+    echo "  service-add <name> <port[:port]>  Add a service"
+    echo "  service-remove <name>             Remove a service"
+    echo "  service-list                      List configured services"
+    echo "  relay                             Enable/disable peon-ping relay by default"
     echo "  update-models                     Update OpenCode models from LLM providers"
     echo "  shutdown [-f]                     Shutdown VM (use -f to force)"
-    echo "  snapshot create [name]             Create snapshot"
-    echo "  snapshot list                      List snapshots"
-    echo "  snapshot delete <name>             Delete snapshot"
-    echo "  snapshot revert <name>             Revert to snapshot"
+    echo "  snapshot create [name]            Create snapshot"
+    echo "  snapshot list                     List snapshots"
+    echo "  snapshot delete <name>            Delete snapshot"
+    echo "  snapshot revert <name>            Revert to snapshot"
     echo ""
     echo "Examples:"
     echo "  $0                                Connect with all services"
-    echo "  $0 service-add opencode 4096     Add opencode service"
+    echo "  $0 -c /path/to/config.conf        Use custom config file"
+    echo "  $0 service-add opencode 4096      Add opencode service"
     echo "  $0 update-models                 Update OpenCode models"
     echo "  $0 shutdown                       Gracefully shutdown VM"
     echo "  $0 snapshot create                Create snapshot with auto name"
     echo ""
     echo "Options:"
-    echo "  -w, --open-web  Open browser after connecting"
-    echo "  -h, --help     Show this help"
-    echo "  --completion   Output shell completion script (bash or zsh)"
+    echo "  -c, --config FILE    Path to config file (default: ~/.config/aibox/aibox.conf)"
+    echo "  -w, --open-web       Open browser after connecting"
+    echo "  -n, --no-service     Start without SSH tunnels (no port forwarding)"
+    echo "  -p, --peon-relay     Enable peon-ping relay (port 19998)"
+    echo "  -h, --help           Show this help"
+    echo "  --completion [shell] Output shell completion script (bash or zsh)"
     exit 0
 }
 
@@ -152,14 +153,68 @@ BASHEOF
     fi
 }
 
-if [[ "$1" == "--completion" ]]; then
-    completion "${2:-}"
-    exit 0
+# --- Argument Parsing ---
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -c|--config)
+            if [[ $# -lt 2 || "$2" == -* ]]; then
+                echo "Error: -c/--config requires a file argument" >&2
+                exit 1
+            fi
+            CONFIG_FILE="$2"
+            echo "Setting config file to $CONFIG_FILE"
+            shift 2
+            ;;
+        -w|--open-web)
+            OPEN_WEB=true
+            shift
+            ;;
+        -n|--no-service)
+            NO_SERVICE=true
+            shift
+            ;;
+        -p|--peon-relay)
+            PEON_RELAY=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            ;;
+        --completion)
+            completion "${2:-}"
+            exit 0
+            ;;
+        --)
+            shift
+            POSITIONAL_ARGS+=("$@")
+            break
+            ;;
+        *)
+            POSITIONAL_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# Restore non-option arguments
+set -- "${POSITIONAL_ARGS[@]}"
+
+# Set default config file if not provided
+if [[ -z "$CONFIG_FILE" ]]; then
+    CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
 fi
 
-if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    usage
-fi
+# Initialize configuration
+source "$SCRIPT_DIR/shared-funcs.sh"
+source "$SCRIPT_DIR/config-funcs.sh"
+init_config_file
+
+# --- CONFIGURATION FROM CONFIG FILE ---
+VM_NAME=$(get_config "VM_NAME" "aibox")
+GUEST_USER=$(get_config "GUEST_USER" "aibox")
+SERVICES_FILE="${HOME}/.config/aibox/services.json"
+LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
+[[ "$PEON_RELAY" == "false" ]] && PEON_RELAY=$(get_config "PEON_RELAY" "false")
 
 # Handle commands
 case "$1" in
@@ -175,6 +230,25 @@ case "$1" in
         "$CMD_DIR/service-list"
         exit $?
         ;;
+    relay)
+        source "$SCRIPT_DIR/config-funcs.sh"
+        init_config_file
+        case "$2" in
+            on|enable|true|yes)
+                save_config "PEON_RELAY" "true"
+                echo "Peon relay enabled in config."
+                ;;
+            off|disable|false|no)
+                save_config "PEON_RELAY" "false"
+                echo "Peon relay disabled in config."
+                ;;
+            *)
+                echo "Usage: $0 relay [on|off]"
+                exit 1
+                ;;
+        esac
+        exit 0
+        ;;
     update-models)
         "$CMD_DIR/update-models" "$VM_NAME" "$GUEST_USER"
         exit $?
@@ -189,40 +263,34 @@ case "$1" in
         ;;
 esac
 
-OPEN_WEB=false
 
-# Parse options
-while [[ "$1" == "-"* ]]; do
-    case "$1" in
-        -w|--open-web)
-            OPEN_WEB=true
-            ;;
-        *)
-            ;;
-    esac
-    shift
-done
+# Load services from config (skip if --no-service)
+if [[ "$NO_SERVICE" == "false" ]]; then
+    SERVICES=()
+    while IFS= read -r port; do
+        [[ -n "$port" ]] && SERVICES+=("$port")
+    done < <(load_services)
 
-# Load services from config
-SERVICES=()
-while IFS= read -r port; do
-    [[ -n "$port" ]] && SERVICES+=("$port")
-done < <(load_services)
+    # Merge command line args with services
+    ALL_PORTS=("${SERVICES[@]}")
+    for arg in "$@"; do
+        ALL_PORTS+=("$arg")
+    done
 
-# Merge command line args with services
-ALL_PORTS=("${SERVICES[@]}")
-for arg in "$@"; do
-    ALL_PORTS+=("$arg")
-done
-
-# Use all ports or default to services
-if [[ ${#ALL_PORTS[@]} -eq 0 && ${#SERVICES[@]} -gt 0 ]]; then
-    set -- "${SERVICES[@]}"
-elif [[ ${#ALL_PORTS[@]} -eq 0 ]]; then
-    echo "No services configured. Add one with: $0 service-add <name> <port>"
-    exit 1
+    # Use all ports or default to services
+    if [[ ${#ALL_PORTS[@]} -eq 0 && ${#SERVICES[@]} -gt 0 ]]; then
+        set -- "${SERVICES[@]}"
+    elif [[ ${#ALL_PORTS[@]} -eq 0 ]]; then
+        echo "No services configured. Add one with: $0 service-add <name> <port>"
+        exit 1
+    else
+        set -- "${ALL_PORTS[@]}"
+    fi
 else
-    set -- "${ALL_PORTS[@]}"
+    # --no-service: only use command line port args
+    if [[ $# -eq 0 ]]; then
+        echo "Connecting without services (--no-service)"
+    fi
 fi
 
 # Start VM if it's not running
@@ -249,19 +317,25 @@ if [ -z "$GUEST_IP" ]; then
 fi
 echo -e "\nFound IP: $GUEST_IP"
 
-# Build the Forwarding String
+# Build the Forwarding String (only if ports are specified)
 FORWARD_ARGS=""
-for ARG in "$@"; do
-    if [[ "$ARG" == *:* ]]; then
-        HOST_PORT="${ARG%%:*}"
-        GUEST_PORT="${ARG#*:}"
-    else
-        HOST_PORT="$ARG"
-        GUEST_PORT="$ARG"
-    fi
+if [[ $# -gt 0 ]]; then
+    for ARG in "$@"; do
+        if [[ "$ARG" == *:* ]]; then
+            HOST_PORT="${ARG%%:*}"
+            GUEST_PORT="${ARG#*:}"
+        else
+            HOST_PORT="$ARG"
+            GUEST_PORT="$ARG"
+        fi
 
-    FORWARD_ARGS="$FORWARD_ARGS -L 0.0.0.0:$HOST_PORT:$GUEST_IP:$GUEST_PORT"
-done
+        FORWARD_ARGS="$FORWARD_ARGS -L 0.0.0.0:$HOST_PORT:$GUEST_IP:$GUEST_PORT"
+    done
+fi
+
+if [[ "$PEON_RELAY" == "true" ]]; then
+    FORWARD_ARGS="$FORWARD_ARGS -R 19998:localhost:19998"
+fi
 
 # Wait for SSH to be ready
 echo -n "Waiting for SSH..."
@@ -272,7 +346,11 @@ done
 echo -e "\nSSH is ready!"
 
 # Connect
-echo "Connecting to $GUEST_USER@$GUEST_IP with port(s): $@"
+if [[ -n "$FORWARD_ARGS" ]]; then
+    echo "Connecting to $GUEST_USER@$GUEST_IP with port(s): $@"
+else
+    echo "Connecting to $GUEST_USER@$GUEST_IP (no port forwarding)"
+fi
 
 # Open browser if -w flag is set
 if [[ "$OPEN_WEB" == "true" ]]; then
