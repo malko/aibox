@@ -57,6 +57,7 @@ Description=OpenCode Web Service
 
 [Service]
 Type=simple
+Environment="OPENCODE_CONFIG_DIR=%h/git/opencode/"
 ExecStart=%h/.local/bin/opencode-web-runner
 Restart=always
 RestartSec=5

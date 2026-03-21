@@ -6,15 +6,17 @@ while [[ -L "$SCRIPT_SOURCE" ]]; do
     SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"
 done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
+CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
 source "$SCRIPT_DIR/config-funcs.sh"
+init_config_file
 
+SNAPSHOT_DIR_DEFAULT="$HOME/aibox/snapshots"
+
+load_config
 VM_NAME=$(get_config "VM_NAME" "aibox")
 LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 ACTION="${1:-}"
 SNAPSHOT_NAME="${2:-}"
-
-CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
-SNAPSHOT_DIR_DEFAULT="$HOME/aibox/snapshots"
 
 load_config() {
     if [[ -f "$CONFIG_FILE" ]]; then
