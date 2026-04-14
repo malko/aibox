@@ -54,11 +54,13 @@ sudo apt install virsh libvirt-client
 ./aibox shutdown           # Gracefully shutdown VM
 ./aibox shutdown -f       # Force shutdown VM
 
-./aibox snapshot create              # Create snapshot (auto name)
-./aibox snapshot create my-snap     # Create snapshot (custom name)
+./aibox snapshot create              # Create snapshot (auto name, internal qcow2)
+./aibox snapshot create my-snap     # Create snapshot (custom name, internal qcow2)
 ./aibox snapshot list                # List snapshots
 ./aibox snapshot delete my-snap     # Delete snapshot
 ./aibox snapshot revert my-snap     # Revert to snapshot
+
+Note: Snapshots are internal (embedded in qcow2 file). VM must be shut off to create.
 ```
 
 ## Setup Process
@@ -95,7 +97,6 @@ Main config is at `~/.config/aibox/aibox.conf`:
 ```
 VM_NAME="ai-agentbox"
 GUEST_USER="malko"
-SNAPSHOT_DIR="~/aibox/snapshots"
 ```
 
 ### OpenCode Config

@@ -10,63 +10,13 @@ CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
 source "$SCRIPT_DIR/config-funcs.sh"
 init_config_file
 
-SNAPSHOT_DIR_DEFAULT="$HOME/aibox/snapshots"
-
-load_config() {
-    if [[ -f "$CONFIG_FILE" ]]; then
-        source "$CONFIG_FILE"
-    fi
-    SNAPSHOT_DIR="${SNAPSHOT_DIR:-$SNAPSHOT_DIR_DEFAULT}"
-}
-
 VM_NAME=$(get_config "VM_NAME" "aibox")
 LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 ACTION="${1:-}"
 SNAPSHOT_NAME="${2:-}"
 
-save_config() {
-    local key="$1"
-    local value="$2"
-
-    mkdir -p "$(dirname "$CONFIG_FILE")"
-
-    if [[ -n "$key" && -n "$value" ]]; then
-        if grep -qE "^${key}=" "$CONFIG_FILE" 2>/dev/null; then
-            sed -i "s|^${key}=.*|${key}=\"${value}\"|" "$CONFIG_FILE"
-        else
-            echo "${key}=\"${value}\"" >> "$CONFIG_FILE"
-        fi
-    fi
-}
-
-ensure_snapshot_dir() {
-    if [[ ! -d "$SNAPSHOT_DIR" ]]; then
-        echo "Creating snapshot directory: $SNAPSHOT_DIR"
-        mkdir -p "$SNAPSHOT_DIR"
-    fi
-}
-
-prompt_snapshot_dir() {
-    load_config
-    if [[ -z "$SNAPSHOT_DIR" ]]; then
-        echo "Snapshot directory not configured."
-        read -p "Enter snapshot directory path [$SNAPSHOT_DIR_DEFAULT]: " SNAPSHPATH
-        SNAPSHOT_DIR="${SNAPSHPATH:-$SNAPSHOT_DIR_DEFAULT}"
-        ensure_snapshot_dir
-        save_config "SNAPSHOT_DIR" "$SNAPSHOT_DIR"
-    fi
-}
-
 vm_state() {
     virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null || echo "unknown"
-}
-
-check_virtiofs() {
-    # Check if VM has filesystem (virtiofs) configured
-    if virsh -c "$LIBVIRT_DEFAULT_URI" dominfo "$VM_NAME" 2>/dev/null | grep -q "Filesystem"; then
-        return 0  # Has virtiofs
-    fi
-    return 1  # No virtiofs
 }
 
 case "$ACTION" in
@@ -80,30 +30,26 @@ case "$ACTION" in
             SNAPSHOT_NAME="aibox-$(date +%Y%m%d-%H%M%S)"
         fi
 
-        load_config
-        prompt_snapshot_dir
-        ensure_snapshot_dir
-
         STATE=$(vm_state)
         if [[ "$STATE" == "running" ]]; then
-            if check_virtiofs; then
-                echo "Warning: virtiofs is in use. Snapshot while running may fail."
-                echo "Consider shutting down the VM first: ./aibox shutdown"
-                echo ""
-                read -p "Continue anyway? [y/N]: " -n 1 -r
-                echo
-                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                    echo "Cancelled."
-                    exit 0
-                fi
+            echo "Warning: VM is running. For reliable internal snapshots, shutdown first."
+            read -p "Shutdown VM and create snapshot? [y/N]: " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                echo "Cancelled. Run './aibox shutdown' first."
+                exit 0
             fi
+            virsh -c "$LIBVIRT_DEFAULT_URI" shutdown "$VM_NAME"
+            for i in {1..30}; do
+                STATE=$(vm_state)
+                [[ "$STATE" == "shut off" ]] && break
+                sleep 1
+            done
         fi
 
-        echo "Creating snapshot '$SNAPSHOT_NAME'..."
-        virsh -c "$LIBVIRT_DEFAULT_URI" snapshot-create-as "$VM_NAME" "$SNAPSHOT_NAME" \
-            --disk-only=no \
-            --atomic 2>/dev/null || {
-            echo "Failed to create snapshot. Try shutting down the VM first."
+        echo "Creating internal snapshot '$SNAPSHOT_NAME'..."
+        ERROR_OUTPUT=$(virsh -c "$LIBVIRT_DEFAULT_URI" snapshot-create-as "$VM_NAME" "$SNAPSHOT_NAME" 2>&1) || {
+            echo "Failed to create snapshot: $ERROR_OUTPUT"
             exit 1
         }
 
@@ -138,6 +84,12 @@ case "$ACTION" in
                 [[ "$STATE" == "shut off" ]] && break
                 sleep 1
             done
+        fi
+
+        STATE=$(vm_state)
+        if [[ "$STATE" != "shut off" ]]; then
+            echo "Error: VM did not shutdown in time."
+            exit 1
         fi
 
         echo "Reverting to snapshot '$SNAPSHOT_NAME'..."
