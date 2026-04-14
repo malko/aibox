@@ -12,18 +12,17 @@ init_config_file
 
 SNAPSHOT_DIR_DEFAULT="$HOME/aibox/snapshots"
 
-load_config
-VM_NAME=$(get_config "VM_NAME" "aibox")
-LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
-ACTION="${1:-}"
-SNAPSHOT_NAME="${2:-}"
-
 load_config() {
     if [[ -f "$CONFIG_FILE" ]]; then
         source "$CONFIG_FILE"
     fi
     SNAPSHOT_DIR="${SNAPSHOT_DIR:-$SNAPSHOT_DIR_DEFAULT}"
 }
+
+VM_NAME=$(get_config "VM_NAME" "aibox")
+LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
+ACTION="${1:-}"
+SNAPSHOT_NAME="${2:-}"
 
 save_config() {
     local key="$1"
