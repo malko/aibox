@@ -30,6 +30,16 @@ case "$TARGET" in
     opencode-password)
         "$SCRIPTS_DIR/install-service.sh"
         ;;
+    vscode-server)
+        cd "$HOME/vscode-server"
+        if [[ -f "$HOME/vscode-server/docker-compose.yml" ]]; then
+            docker compose pull
+            docker compose down
+            docker compose up -d
+        else
+            echo "vscode-server not installed"
+        fi
+        ;;
     *)
         echo "Unknown target: $TARGET"
         echo "Available targets: opencode"

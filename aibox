@@ -24,7 +24,7 @@ usage() {
     echo "  service-list                      List configured services"
     echo "  relay                             Enable/disable peon-ping relay by default"
     echo "  update-models                     Update OpenCode models from LLM providers"
-    echo "  update <target>                   Update (opencode, opencode-password, scripts)"
+    echo "  update <target>                   Update (opencode, opencode-password, scripts, vscode-server)"
     echo "  shutdown [-f]                     Shutdown VM (use -f to force)"
     echo "  snapshot create [name]            Create snapshot"
     echo "  snapshot list                     List snapshots"
@@ -73,7 +73,7 @@ commands=(
   'service-remove:remove a service'
   'service-list:list configured services'
   'update-models:update OpenCode models from LLM providers'
-  'update:update service or app (opencode, opencode-password, scripts)'
+  'update:update service or app (opencode, opencode-password, scripts, vscode-server)'
   'shutdown:shutdown VM'
   'snapshot:manage snapshots'
 )
@@ -106,7 +106,7 @@ case $state in
         _values 'flags' '-f --force'
         ;;
       update)
-        _values 'targets' 'opencode' 'opencode-password' 'scripts'
+        _values 'targets' 'opencode' 'opencode-password' 'scripts' 'vscode-server'
         ;;
     esac
     ;;
@@ -140,7 +140,7 @@ _aibox() {
             return 0
             ;;
         update)
-            COMPREPLY=($(compgen -W "opencode opencode-password scripts" -- "${cur}"))
+            COMPREPLY=($(compgen -W "opencode opencode-password scripts vscode-server" -- "${cur}"))
             return 0
             ;;
         shutdown)
