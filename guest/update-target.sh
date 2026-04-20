@@ -10,7 +10,7 @@ fi
 
 if [[ -z "$TARGET" ]]; then
     echo "Usage: $0 <target>"
-    echo "Targets: opencode"
+    echo "Targets: opencode, opencode-password"
     exit 1
 fi
 
@@ -26,6 +26,9 @@ case "$TARGET" in
         systemctl --user restart opencode-web.service
         sleep 2
         systemctl --user status opencode-web.service --no-pager
+        ;;
+    opencode-password)
+        "$SCRIPTS_DIR/install-service.sh"
         ;;
     *)
         echo "Unknown target: $TARGET"

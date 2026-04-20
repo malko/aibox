@@ -24,22 +24,27 @@ if [ -z "$OPENCODE_PATH" ]; then
 fi
 echo "==> opencode found: $OPENCODE_PATH"
 
+echo -n "Set opencode web password (user:opencode, empty for no password): "
+read -s PASSWORD
+
 WRAPPER_DIR="$HOME_DIR/.local/bin"
 WRAPPER_SCRIPT="$WRAPPER_DIR/opencode-web-runner"
 echo "==> Creating wrapper at: $WRAPPER_SCRIPT"
 mkdir -p "$WRAPPER_DIR"
 
 if [ "$NVM_SOURCED" = true ]; then
-    cat > "$WRAPPER_SCRIPT" << 'EOFWRAPPER'
+    cat > "$WRAPPER_SCRIPT" << EOFWRAPPER
 #!/bin/bash
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+export NVM_DIR="\$HOME/.nvm"
+export OPENCODE_SERVER_PASSWORD="$PASSWORD"
+[ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
 exec opencode web --hostname 0.0.0.0
 EOFWRAPPER
     echo "==> Wrapper created with NVM support"
 else
-    cat > "$WRAPPER_SCRIPT" << 'EOFWRAPPER'
+    cat > "$WRAPPER_SCRIPT" << EOFWRAPPER
 #!/bin/bash
+export OPENCODE_SERVER_PASSWORD="$PASSWORD"
 exec opencode web --hostname 0.0.0.0
 EOFWRAPPER
     echo "==> Wrapper created without NVM"
@@ -90,7 +95,7 @@ echo "==> Enabling service..."
 systemctl --user enable opencode-web.service
 
 echo "==> Starting service..."
-systemctl --user start opencode-web.service
+systemctl --user restart opencode-web.service
 
 echo "==> Checking linger..."
 if loginctl show-user "$USER_NAME" 2>/dev/null | grep -q "Linger=yes"; then

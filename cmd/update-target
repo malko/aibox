@@ -18,8 +18,6 @@ TARGET="$1"
 VM_NAME=${2:-$(get_config "VM_NAME" "aibox")}
 GUEST_USER=${3:-$(get_config "GUEST_USER" "aibox")}
 
-
-
 LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 
 GUEST_IP=$(virsh -c "$LIBVIRT_DEFAULT_URI" domifaddr "$VM_NAME" --source lease 2>/dev/null | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)

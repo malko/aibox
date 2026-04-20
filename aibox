@@ -24,7 +24,7 @@ usage() {
     echo "  service-list                      List configured services"
     echo "  relay                             Enable/disable peon-ping relay by default"
     echo "  update-models                     Update OpenCode models from LLM providers"
-    echo "  update <target>                   Update and restart service (opencode, scripts)"
+    echo "  update <target>                   Update (opencode, opencode-password, scripts)"
     echo "  shutdown [-f]                     Shutdown VM (use -f to force)"
     echo "  snapshot create [name]            Create snapshot"
     echo "  snapshot list                     List snapshots"
@@ -37,6 +37,7 @@ usage() {
     echo "  $0 service-add opencode 4096      Add opencode service"
     echo "  $0 update-models                  Update OpenCode models"
     echo "  $0 update opencode                Update and restart opencode"
+    echo "  $0 update opencode-password       Set opencode password"
     echo "  $0 update scripts                 Upload scripts to VM"
     echo "  $0 shutdown                       Gracefully shutdown VM"
     echo "  $0 snapshot create                Create snapshot with auto name"
@@ -72,7 +73,7 @@ commands=(
   'service-remove:remove a service'
   'service-list:list configured services'
   'update-models:update OpenCode models from LLM providers'
-  'update:update service or app (opencode, scripts)'
+  'update:update service or app (opencode, opencode-password, scripts)'
   'shutdown:shutdown VM'
   'snapshot:manage snapshots'
 )
@@ -105,7 +106,7 @@ case $state in
         _values 'flags' '-f --force'
         ;;
       update)
-        _values 'targets' 'opencode' 'scripts'
+        _values 'targets' 'opencode' 'opencode-password' 'scripts'
         ;;
     esac
     ;;
@@ -139,7 +140,7 @@ _aibox() {
             return 0
             ;;
         update)
-            COMPREPLY=($(compgen -W "opencode scripts" -- "${cur}"))
+            COMPREPLY=($(compgen -W "opencode opencode-password scripts" -- "${cur}"))
             return 0
             ;;
         shutdown)
@@ -268,7 +269,7 @@ case "$1" in
         TARGET="$2"
         if [[ -z "$TARGET" ]]; then
             echo "Usage: $0 update <target>"
-            echo "Targets: opencode, scripts"
+            echo "Targets: opencode, opencode-password, scripts"
             exit 1
         fi
         "$CMD_DIR/update-target" "$TARGET" "$VM_NAME" "$GUEST_USER"
