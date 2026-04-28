@@ -110,7 +110,7 @@ if [[ "$INSTALL_DEPS" == "yes" ]]; then
     print_success "Dependencies installed!"
 fi
 
-CONFIGURE_GIT=$(prompt_config_yes_no "CONFIGURE_GIT" "Configure Git in VM?" "yes")
+CONFIGURE_GIT=$(prompt_config_yes_no "CONFIGURE_GIT" "Configure Git user in VM?" "yes")
 save_config "CONFIGURE_GIT" "$CONFIGURE_GIT"
 
 if [[ "$CONFIGURE_GIT" == "yes" ]]; then
@@ -131,7 +131,7 @@ if [[ "$CONFIGURE_MOTD" == "yes" ]]; then
     print_success "MOTD configured!"
 fi
 
-ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "mkdir -p ~/git ~/scripts"
+ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "mkdir -p ~/git/opencode/agents ~/git/opencode/commands ~/git/opencode/skills ~/git/opencode/tools ~/scripts"
 print_success "Directories created!"
 
 CONFIGURE_HOST_ACCESS=$(prompt_config_yes_no "CONFIGURE_HOST_ACCESS" "Configure 'aibox-host' in VM /etc/hosts?" "yes")
@@ -160,6 +160,14 @@ if [[ "$INSTALL_DOCKER" == "yes" ]]; then
         print_success "Docker installed!"
     fi
 fi
+
+DOCKER_INSTALLED=$(ssh -o ConnectTimeout=5 "$GUEST_USER@$GUEST_IP" "command -v docker" 2>/dev/null || echo "")
+if [[ -n "$DOCKER_INSTALLED" ]]; then
+    INSTALL_VSCODE=$(prompt_config_yes_no "INSTALL_VSCODE" "Install vscode-server?" "yes")
+    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/install-vscode.sh"
+    print_success "vscode-server installed"
+fi
+
 
 OPENCODE_PORT=$(prompt_config "OPENCODE_PORT" "opencode-web port" "4096")
 save_config "OPENCODE_PORT" "$OPENCODE_PORT"

@@ -55,7 +55,7 @@ SERVICE_DIR="$HOME_DIR/.config/systemd/user"
 SERVICE_FILE="$SERVICE_DIR/opencode-web.service"
 echo "==> Service file: $SERVICE_FILE"
 mkdir -p "$SERVICE_DIR"
-
+mkdir -p "$HOME_DIR/git/opencode"
 NEW_CONTENT=$(cat << 'EOF'
 [Unit]
 Description=OpenCode Web Service
