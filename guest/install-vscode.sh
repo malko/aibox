@@ -13,6 +13,10 @@ if [[ -z $VSCODE_PASSWORD ]]; then
     exit 1
 fi
 
+# Compose file contains the web password: make it owner-only before writing
+touch "$VSCODE_DIR/docker-compose.yml"
+chmod 600 "$VSCODE_DIR/docker-compose.yml"
+
 cat > "$VSCODE_DIR/docker-compose.yml" << EOFWRAPPER
 version: '3.8'
 

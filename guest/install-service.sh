@@ -32,6 +32,10 @@ WRAPPER_SCRIPT="$WRAPPER_DIR/opencode-web-runner"
 echo "==> Creating wrapper at: $WRAPPER_SCRIPT"
 mkdir -p "$WRAPPER_DIR"
 
+# Wrapper contains the web password: make it owner-only before writing
+touch "$WRAPPER_SCRIPT"
+chmod 700 "$WRAPPER_SCRIPT"
+
 if [ "$NVM_SOURCED" = true ]; then
     cat > "$WRAPPER_SCRIPT" << EOFWRAPPER
 #!/bin/bash
@@ -49,7 +53,6 @@ exec opencode web --hostname 0.0.0.0
 EOFWRAPPER
     echo "==> Wrapper created without NVM"
 fi
-chmod +x "$WRAPPER_SCRIPT"
 
 SERVICE_DIR="$HOME_DIR/.config/systemd/user"
 SERVICE_FILE="$SERVICE_DIR/opencode-web.service"
