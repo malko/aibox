@@ -189,7 +189,7 @@ else
 fi
 
 print_info "Configuring OpenCode..."
-ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" 'mkdir -p ~/.config/opencode && echo "{ \"provider\": {} }" > ~/.config/opencode/opencode.json'
+ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" 'mkdir -p ~/.config/opencode; if [ ! -f ~/.config/opencode/opencode.json ]; then echo "{ \"provider\": {} }" > ~/.config/opencode/opencode.json; fi'
 
 CONFIGURE_OLLAMA=$(prompt_config_yes_no "CONFIGURE_OLLAMA" "Configure Ollama?" "no")
 save_config "CONFIGURE_OLLAMA" "$CONFIGURE_OLLAMA"
