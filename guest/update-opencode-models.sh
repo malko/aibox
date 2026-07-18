@@ -49,30 +49,84 @@ fetch_models() {
     fi
 
     API_BASE_URL="${config_url%/v1}"
-    API_TOKEN="$config_token"
-
-    local api_url="${API_BASE_URL}/api/v0/models"
-    local response_file="$TEMP_DIR/${provider}_response.json"
+    # Stored header value is the full "Bearer <token>" string
+    API_TOKEN="${config_token#Bearer }"
 
     local curl_opts=("-s" "--max-time" "10")
     if [[ -n "$API_TOKEN" && "$API_TOKEN" != "null" ]]; then
         curl_opts+=("-H" "Authorization: Bearer $API_TOKEN")
     fi
 
-    if ! curl "${curl_opts[@]}" "$api_url" > "$response_file" 2>&1; then
-        echo -e "${RED}❌ Error connecting to ${provider}${NC}" >&2
+    if [[ "$provider" == "ollama" ]]; then
+        fetch_models_ollama "${curl_opts[@]}"
+    else
+        fetch_models_lmstudio "${curl_opts[@]}"
+    fi
+}
+
+# Fetch models from LM Studio REST API (/api/v0/models)
+fetch_models_lmstudio() {
+    local api_url="${API_BASE_URL}/api/v0/models"
+    local response_file="$TEMP_DIR/lmstudio_response.json"
+
+    if ! curl "$@" "$api_url" > "$response_file"; then
+        echo -e "${RED}❌ Error connecting to lmstudio${NC}" >&2
         echo -e "   Make sure the server is running at ${API_BASE_URL}${NC}" >&2
         exit 1
     fi
 
     if ! jq -e . "$response_file" >/dev/null 2>&1; then
-        echo -e "${RED}❌ Error parsing response from ${provider}${NC}" >&2
+        echo -e "${RED}❌ Error parsing response from lmstudio${NC}" >&2
         cat "$response_file" >&2
         exit 1
     fi
 
     jq -r '.data // [] | .[] | @base64' "$response_file" > "$TEMP_DIR/models_base64.txt"
-    cp "$response_file" "$TEMP_DIR/models.json"
+}
+
+# Fetch models from Ollama API (/api/tags + /api/show), normalized to the
+# same {id, type, max_context_length, reasoning} shape as LM Studio entries
+fetch_models_ollama() {
+    local api_url="${API_BASE_URL}/api/tags"
+    local response_file="$TEMP_DIR/ollama_response.json"
+    local show_file="$TEMP_DIR/ollama_show.json"
+    local name
+
+    if ! curl "$@" "$api_url" > "$response_file"; then
+        echo -e "${RED}❌ Error connecting to ollama${NC}" >&2
+        echo -e "   Make sure the server is running at ${API_BASE_URL}${NC}" >&2
+        exit 1
+    fi
+
+    if ! jq -e . "$response_file" >/dev/null 2>&1; then
+        echo -e "${RED}❌ Error parsing response from ollama${NC}" >&2
+        cat "$response_file" >&2
+        exit 1
+    fi
+
+    : > "$TEMP_DIR/models_base64.txt"
+
+    while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+
+        if ! curl "$@" -H "Content-Type: application/json" \
+                -d "$(jq -cn --arg m "$name" '{model: $m}')" \
+                "${API_BASE_URL}/api/show" > "$show_file" \
+                || ! jq -e . "$show_file" >/dev/null 2>&1; then
+            echo -e "${YELLOW}⚠️  Could not fetch details for ${name}, skipping${NC}" >&2
+            continue
+        fi
+
+        jq -c --arg id "$name" '{
+            id: $id,
+            type: (if (.capabilities // []) | index("vision") then "vlm" else "llm" end),
+            max_context_length: ((.model_info // {}) | to_entries
+                | map(select(.key | endswith(".context_length")))
+                | (.[0].value // null)),
+            reasoning: ((.capabilities // []) | index("thinking") != null)
+        }' "$show_file" | base64 -w 0 >> "$TEMP_DIR/models_base64.txt"
+        echo >> "$TEMP_DIR/models_base64.txt"
+    done < <(jq -r '.models // [] | .[].name' "$response_file")
 }
 
 # Function to create config key from model ID
@@ -110,8 +164,10 @@ build_models_json() {
             props="$props, \"limit\": {\"context\": $max_context, \"output\": $max_output}"
         fi
 
+        local model_reasoning=$(echo "$model_json" | jq -r '.reasoning // false')
+
         # Add reasoning capability
-        if is_thinking_model "$model_id"; then
+        if [[ "$model_reasoning" == "true" ]] || is_thinking_model "$model_id"; then
             props="$props, \"reasoning\": true"
         fi
 
