@@ -201,7 +201,10 @@ save_config "CONFIGURE_OLLAMA" "$CONFIGURE_OLLAMA"
 CONFIGURE_LMS=$(prompt_config_yes_no "CONFIGURE_LMS" "Configure LM Studio?" "no")
 save_config "CONFIGURE_LMS" "$CONFIGURE_LMS"
 
-if [[ "$CONFIGURE_OLLAMA" == "yes" || "$CONFIGURE_LMS" == "yes" ]]; then
+CONFIGURE_LLAMACPP=$(prompt_config_yes_no "CONFIGURE_LLAMACPP" "Configure llama.cpp server?" "no")
+save_config "CONFIGURE_LLAMACPP" "$CONFIGURE_LLAMACPP"
+
+if [[ "$CONFIGURE_OLLAMA" == "yes" || "$CONFIGURE_LMS" == "yes" || "$CONFIGURE_LLAMACPP" == "yes" ]]; then
     if [[ "$CONFIGURE_OLLAMA" == "yes" ]]; then
         OLLAMA_URL=$(prompt_config "OLLAMA_URL" "Ollama URL" "http://aibox-host:11434")
         save_config "OLLAMA_URL" "$OLLAMA_URL"
@@ -218,6 +221,14 @@ if [[ "$CONFIGURE_OLLAMA" == "yes" || "$CONFIGURE_LMS" == "yes" ]]; then
         ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/configure-llm.sh lms $LMS_URL $LMS_TOKEN"
     fi
 
+    if [[ "$CONFIGURE_LLAMACPP" == "yes" ]]; then
+        LLAMACPP_URL=$(prompt_config "LLAMACPP_URL" "llama.cpp server URL" "http://aibox-host:8080")
+        save_config "LLAMACPP_URL" "$LLAMACPP_URL"
+        LLAMACPP_TOKEN=$(prompt_config "LLAMACPP_TOKEN" "llama.cpp API key" "")
+        save_config "LLAMACPP_TOKEN" "$LLAMACPP_TOKEN"
+        ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/configure-llm.sh llamacpp $LLAMACPP_URL $LLAMACPP_TOKEN"
+    fi
+
     print_success "LLM providers configured!"
 
     if [[ "$CONFIGURE_OLLAMA" == "yes" ]]; then
@@ -226,6 +237,10 @@ if [[ "$CONFIGURE_OLLAMA" == "yes" || "$CONFIGURE_LMS" == "yes" ]]; then
 
     if [[ "$CONFIGURE_LMS" == "yes" ]]; then
         ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/update-opencode-models.sh lmstudio"
+    fi
+
+    if [[ "$CONFIGURE_LLAMACPP" == "yes" ]]; then
+        ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/update-opencode-models.sh llamacpp"
     fi
 
     print_success "OpenCode models updated!"
