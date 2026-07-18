@@ -5,8 +5,9 @@ while [[ -L "$SCRIPT_SOURCE" ]]; do
     SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"
 done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
-source "$SCRIPT_DIR/config-funcs.sh"
 CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
+source "$SCRIPT_DIR/config-funcs.sh"
+init_config_file
 
 VM_NAME="${1:-aibox}"
 FORCE="${2:-}"
