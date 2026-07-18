@@ -51,3 +51,22 @@ if [[ "$1" == "lms" ]]; then
 
     print_success "LM Studio provider added!"
 fi
+
+if [[ "$1" == "llamacpp" || "$1" == "llama.cpp" || "$1" == "llama-cpp" ]]; then
+    LLAMACPP_URL="${2:-http://localhost:8080}"
+    LLAMACPP_TOKEN="${3:-}"
+    print_info "Adding llama.cpp provider..."
+
+    TMP=$(mktemp)
+    if [[ -n "$LLAMACPP_TOKEN" ]]; then
+        jq --arg url "$LLAMACPP_URL/v1" --arg token "$LLAMACPP_TOKEN" \
+           '.provider.llamacpp = {"npm": "@ai-sdk/openai-compatible", "name": "llama.cpp (local)", "options": {"baseURL": $url, "headers": {"Authorization": ("Bearer " + $token)}}}' \
+           "$OPENCODE_CONFIG_FILE" > "$TMP" && mv "$TMP" "$OPENCODE_CONFIG_FILE"
+    else
+        jq --arg url "$LLAMACPP_URL/v1" \
+           '.provider.llamacpp = {"npm": "@ai-sdk/openai-compatible", "name": "llama.cpp (local)", "options": {"baseURL": $url}}' \
+           "$OPENCODE_CONFIG_FILE" > "$TMP" && mv "$TMP" "$OPENCODE_CONFIG_FILE"
+    fi
+
+    print_success "llama.cpp provider added!"
+fi

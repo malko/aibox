@@ -7,7 +7,7 @@
 # capabilities, and other model properties.
 #
 # Usage: ./update-opencode-models.sh [provider]
-#   provider: lmstudio or ollama (default: lmstudio)
+#   provider: lmstudio, ollama or llamacpp (default: lmstudio)
 #
 
 set -e
@@ -59,6 +59,8 @@ fetch_models() {
 
     if [[ "$provider" == "ollama" ]]; then
         fetch_models_ollama "${curl_opts[@]}"
+    elif [[ "$provider" == "llamacpp" ]]; then
+        fetch_models_llamacpp "${curl_opts[@]}"
     else
         fetch_models_lmstudio "${curl_opts[@]}"
     fi
@@ -129,6 +131,44 @@ fetch_models_ollama() {
     done < <(jq -r '.models // [] | .[].name' "$response_file")
 }
 
+# Fetch models from llama.cpp server (/v1/models + /props), normalized to
+# the same {id, type, max_context_length} shape as LM Studio entries
+fetch_models_llamacpp() {
+    local api_url="${API_BASE_URL}/v1/models"
+    local response_file="$TEMP_DIR/llamacpp_response.json"
+    local props_file="$TEMP_DIR/llamacpp_props.json"
+
+    if ! curl "$@" "$api_url" > "$response_file"; then
+        echo -e "${RED}❌ Error connecting to llamacpp${NC}" >&2
+        echo -e "   Make sure the server is running at ${API_BASE_URL}${NC}" >&2
+        exit 1
+    fi
+
+    if ! jq -e . "$response_file" >/dev/null 2>&1; then
+        echo -e "${RED}❌ Error parsing response from llamacpp${NC}" >&2
+        cat "$response_file" >&2
+        exit 1
+    fi
+
+    # Serving context size and vision modality only exist in /props; fall
+    # back to the model's trained context from /v1/models meta if missing
+    if ! curl "$@" "${API_BASE_URL}/props" > "$props_file" \
+            || ! jq -e . "$props_file" >/dev/null 2>&1; then
+        echo '{}' > "$props_file"
+    fi
+
+    local server_ctx server_vision
+    server_ctx=$(jq -r '.default_generation_settings.n_ctx // "null"' "$props_file")
+    server_vision=$(jq -r '.modalities.vision // false' "$props_file")
+
+    jq -r --argjson ctx "$server_ctx" --argjson vision "$server_vision" '
+        .data // [] | .[] | {
+            id: .id,
+            type: (if $vision then "vlm" else "llm" end),
+            max_context_length: ($ctx // .meta.n_ctx_train // null)
+        } | @base64' "$response_file" > "$TEMP_DIR/models_base64.txt"
+}
+
 # Function to create config key from model ID
 create_config_key() {
     local model_id="$1"
@@ -197,10 +237,13 @@ main() {
     if [[ "$provider" == "lms" ]]; then
         provider="lmstudio"
     fi
+    if [[ "$provider" == "llama.cpp" || "$provider" == "llama-cpp" ]]; then
+        provider="llamacpp"
+    fi
 
-    if [[ "$provider" != "lmstudio" && "$provider" != "ollama" ]]; then
+    if [[ "$provider" != "lmstudio" && "$provider" != "ollama" && "$provider" != "llamacpp" ]]; then
         echo -e "${RED}❌ Invalid provider: $provider${NC}" >&2
-        echo -e "   Supported providers: lmstudio, ollama${NC}" >&2
+        echo -e "   Supported providers: lmstudio, ollama, llamacpp${NC}" >&2
         exit 1
     fi
 
@@ -254,6 +297,8 @@ main() {
     local provider_name="LM Studio"
     if [[ "$provider" == "ollama" ]]; then
         provider_name="Ollama"
+    elif [[ "$provider" == "llamacpp" ]]; then
+        provider_name="llama.cpp"
     fi
 
     local base_url_for_config="${API_BASE_URL}/v1"
