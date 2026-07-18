@@ -164,8 +164,12 @@ fi
 DOCKER_INSTALLED=$(ssh -o ConnectTimeout=5 "$GUEST_USER@$GUEST_IP" "command -v docker" 2>/dev/null || echo "")
 if [[ -n "$DOCKER_INSTALLED" ]]; then
     INSTALL_VSCODE=$(prompt_config_yes_no "INSTALL_VSCODE" "Install vscode-server?" "yes")
-    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/install-vscode.sh"
-    print_success "vscode-server installed"
+    save_config "INSTALL_VSCODE" "$INSTALL_VSCODE"
+
+    if [[ "$INSTALL_VSCODE" == "yes" ]]; then
+        ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/install-vscode.sh"
+        print_success "vscode-server installed"
+    fi
 fi
 
 
