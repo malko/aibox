@@ -87,10 +87,8 @@ check_command() {
 
 check_requirements() {
     local missing=()
-    local cmd="$1"
-    shift
-    
-    for c in "$cmd"; do
+
+    for c in "$@"; do
         if ! command -v "$c" &>/dev/null; then
             missing+=("$c")
         fi
