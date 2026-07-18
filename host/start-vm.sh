@@ -27,9 +27,7 @@ else
     exit 1
 fi
 
-if [[ -f /tmp/aibox-vm-info ]]; then
-    source /tmp/aibox-vm-info
-fi
+load_vm_info "$VM_NAME"
 
 if [[ -n "$GUEST_IP" ]] && nc -z -w 1 "$GUEST_IP" 22 &>/dev/null; then
     print_success "VM is ready at $GUEST_IP"
@@ -87,7 +85,6 @@ if ! nc -z -w 1 "$GUEST_IP" 22 &>/dev/null; then
     exit 1
 fi
 
-echo "GUEST_IP=$GUEST_IP" > /tmp/aibox-vm-info
-echo "VM_NAME=$VM_NAME" >> /tmp/aibox-vm-info
+save_vm_info "$VM_NAME" "$GUEST_IP"
 
 print_success "VM '$VM_NAME' is ready at $GUEST_IP"

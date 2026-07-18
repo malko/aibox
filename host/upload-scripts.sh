@@ -5,9 +5,7 @@ source "$(dirname "$0")/../shared-funcs.sh"
 
 VM_NAME="${1:-}"
 
-if [[ -f /tmp/aibox-vm-info ]]; then
-    source /tmp/aibox-vm-info
-fi
+load_vm_info "$VM_NAME"
 
 GUEST_IP="${2:-$GUEST_IP}"
 GUEST_USER="${3:-$GUEST_USER}"

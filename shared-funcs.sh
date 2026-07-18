@@ -78,6 +78,30 @@ prompt_password() {
     done
 }
 
+# Cached VM info (VM name + last known IP). Stored in a user-owned runtime
+# dir and parsed (not sourced) so its content is never executed as code.
+VM_INFO_FILE="${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-vm-info"
+
+save_vm_info() {
+    local vm_name="$1"
+    local guest_ip="$2"
+    mkdir -p "$(dirname "$VM_INFO_FILE")"
+    printf 'VM_NAME=%s\nGUEST_IP=%s\n' "$vm_name" "$guest_ip" > "$VM_INFO_FILE"
+}
+
+# Sets GUEST_IP from the cache. If a VM name is given, the cached IP is
+# only used when it belongs to that VM.
+load_vm_info() {
+    local vm_name="${1:-}"
+    [[ -f "$VM_INFO_FILE" ]] || return 0
+    if [[ -n "$vm_name" ]]; then
+        local cached_vm
+        cached_vm=$(sed -n 's/^VM_NAME=//p' "$VM_INFO_FILE")
+        [[ "$cached_vm" == "$vm_name" ]] || return 0
+    fi
+    GUEST_IP=$(sed -n 's/^GUEST_IP=//p' "$VM_INFO_FILE")
+}
+
 check_command() {
     if ! command -v "$1" &>/dev/null; then
         print_error "Command '$1' not found. Install it and try again."

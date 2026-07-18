@@ -14,10 +14,6 @@ LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 VM_NAME="${1:-aibox}"
 HOST_SHARE_DIR="${2:-$HOME/git}"
 
-if [[ -f /tmp/aibox-vm-info ]]; then
-    source /tmp/aibox-vm-info
-fi
-
 print_info "=== Configure Virtiofs (Host) ==="
 
 print_info "VM: $VM_NAME"
