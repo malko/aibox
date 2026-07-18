@@ -262,7 +262,7 @@ case "$1" in
         exit 0
         ;;
     update-models)
-        "$CMD_DIR/update-models" "$VM_NAME" "$GUEST_USER"
+        "$CMD_DIR/update-models" "$VM_NAME" "${2:-}" "$GUEST_USER"
         exit $?
         ;;
     update)
