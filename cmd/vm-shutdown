@@ -16,6 +16,10 @@ if [[ "$FORCE" == "-f" || "$FORCE" == "--force" ]]; then
     echo "Force shutting down VM '$VM_NAME'..."
     virsh -c "$LIBVIRT_DEFAULT_URI" destroy "$VM_NAME"
 else
+    echo "Trimming filesystem inside '$VM_NAME' to reclaim space..."
+    # we use '|| true' to avoid 'set -e' to kill the script if agent doesn't respond
+    virsh -c "$LIBVIRT_DEFAULT_URI" qemu-agent-command "$VM_NAME" '{"execute":"guest-fstrim"}' >/dev/null 2>&1 || echo "Warning: QEMU guest agent not responding, skipping TRIM."
+   
     echo "Gracefully shutting down VM '$VM_NAME'..."
     virsh -c "$LIBVIRT_DEFAULT_URI" shutdown "$VM_NAME"
 
