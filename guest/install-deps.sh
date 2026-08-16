@@ -8,7 +8,7 @@ print_info "=== Install Dependencies ==="
 
 echo "Updating packages..."
 sudo apt update
-sudo apt install -y curl jq netcat-openbsd git
+sudo apt install -y curl jq netcat-openbsd git qemu-guest-agent
 
 if ! command -v nvm &>/dev/null && [ ! -d "$HOME/.nvm" ]; then
     echo "Installing nvm..."

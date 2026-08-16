@@ -42,7 +42,7 @@ case "$TARGET" in
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Available targets: opencode"
+        echo "Available targets: opencode, opencode-password, vscode-server"
         exit 1
         ;;
 esac
