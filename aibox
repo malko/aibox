@@ -61,7 +61,7 @@ load_services() {
 completion() {
     # Detect shell if not specified
     local shell="${1:-}"
-    [[ -z "$shell" ]] && shell="${BASH_VERSION:+bash}${ZSH_VERSION:+zsh}"
+    [[ -z "$shell" ]] && shell="bash"
 
     if [[ "$shell" == "zsh" ]]; then
         cat << 'ZEOF'
@@ -230,6 +230,10 @@ LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 
 # Handle commands
 case "$1" in
+    help)
+        usage
+        exit 0
+        ;;
     service-add)
         "$CMD_DIR/service-add" "${@:2}"
         exit $?
