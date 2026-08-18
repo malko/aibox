@@ -355,7 +355,7 @@ if [[ $# -gt 0 ]]; then
             GUEST_PORT="$ARG"
         fi
 
-        FORWARD_ARGS="$FORWARD_ARGS -L 0.0.0.0:$HOST_PORT:$GUEST_IP:$GUEST_PORT"
+        FORWARD_ARGS="$FORWARD_ARGS -L 0.0.0.0:$HOST_PORT:127.0.0.1:$GUEST_PORT"
     done
 fi
 
