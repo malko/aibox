@@ -273,7 +273,7 @@ case "$1" in
         TARGET="$2"
         if [[ -z "$TARGET" ]]; then
             echo "Usage: $0 update <target>"
-            echo "Targets: opencode, opencode-password, dsh, scripts"
+            echo "Targets: opencode, opencode-password, dsh, scripts, vscode-server"
             exit 1
         fi
         "$CMD_DIR/update-target" "$TARGET" "$VM_NAME" "$GUEST_USER"
