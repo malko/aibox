@@ -86,7 +86,13 @@ if [ -f "$UPDATES_CACHE" ]; then
     NPM_OUTDATED=$(cache_get NPM_OUTDATED)
     VSCODE=$(cache_get VSCODE)
 
-    if [ -n "$TS" ] && [ $(( $(date +%s) - TS )) -lt 172800 ]; then
+    # Ignore a cache written before the current boot: it may predate a reboot
+    # (e.g. a stale "reboot required") until the timer refreshes it.
+    NOW=$(date +%s)
+    UPTIME=$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)
+    BOOT=$((NOW - UPTIME))
+
+    if [ -n "$TS" ] && [ "$TS" -ge "$BOOT" ] && [ $((NOW - TS)) -lt 172800 ]; then
         if [ "${APT_COUNT:-0}" -gt 0 ] 2>/dev/null || [ -n "$NPM_OUTDATED" ] \
             || [ "$VSCODE" = "yes" ] || [ "$REBOOT" = "yes" ]; then
             printf "%b\n" "  ${YELLOW}⚠ Updates available${NC}"

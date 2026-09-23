@@ -72,3 +72,6 @@ case "$TARGET" in
         exit 1
         ;;
 esac
+
+# Refresh the cached update summary so the MOTD stays accurate after updating.
+systemctl --user start --no-block aibox-update-check.service 2>/dev/null || true
