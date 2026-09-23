@@ -66,10 +66,17 @@ save_config() {
     mkdir -p "$(dirname "$CONFIG_FILE")"
 
     if [[ -n "$key" && -n "$value" ]]; then
+        # The config file is later sourced, so first escape the value for the
+        # double-quoted assignment, then escape the characters sed treats
+        # specially in the replacement ('|' delimiter, '&' whole match, '\').
+        local shell_value escaped_value
+        shell_value=$(printf '%s' "$value" | sed -e 's/[\\"$`]/\\&/g')
+
         if grep -qE "^${key}=" "$CONFIG_FILE" 2>/dev/null; then
-            sed -i "s|^${key}=.*|${key}=\"${value}\"|" "$CONFIG_FILE"
+            escaped_value=$(printf '%s' "$shell_value" | sed -e 's/[&|\\]/\\&/g')
+            sed -i "s|^${key}=.*|${key}=\"${escaped_value}\"|" "$CONFIG_FILE"
         else
-            echo "${key}=\"${value}\"" >> "$CONFIG_FILE"
+            printf '%s\n' "${key}=\"${shell_value}\"" >> "$CONFIG_FILE"
         fi
     fi
 }
