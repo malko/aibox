@@ -53,6 +53,8 @@ sudo apt install virsh libvirt-client
 ```bash
 ./aibox shutdown           # Gracefully shutdown VM
 ./aibox shutdown -f       # Force shutdown VM
+./aibox restart            # Gracefully restart VM
+./aibox restart -f        # Force restart VM
 
 ./aibox snapshot create              # Create snapshot (auto name, internal qcow2)
 ./aibox snapshot create my-snap     # Create snapshot (custom name, internal qcow2)
@@ -130,6 +132,7 @@ aibox/
 │   ├── service-remove             # Remove service
 │   ├── service-list               # List services
 │   ├── vm-shutdown                # Shutdown VM
+│   ├── vm-restart                 # Restart VM
 │   └── vm-snapshot                # Manage snapshots
 ├── host/                          # Host-side scripts
 │   ├── create-vm.sh               # Create VM

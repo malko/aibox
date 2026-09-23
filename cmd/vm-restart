@@ -1,0 +1,15 @@
+#!/bin/bash
+set -e
+
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_SOURCE" ]]; do
+    SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
+
+VM_NAME="${1:-aibox}"
+FORCE="${2:-}"
+
+# Reuse the existing shutdown/start logic so restart stays a thin wrapper.
+"$SCRIPT_DIR/cmd/vm-shutdown" "$VM_NAME" "$FORCE"
+"$SCRIPT_DIR/host/start-vm.sh" "$VM_NAME"

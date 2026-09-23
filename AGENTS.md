@@ -31,6 +31,8 @@ This repository contains bash scripts for managing an AI development VM with KVM
 # VM management
 ./aibox shutdown
 ./aibox shutdown -f
+./aibox restart
+./aibox restart -f
 ./aibox snapshot create
 ./aibox snapshot list
 ./aibox snapshot revert <name>
