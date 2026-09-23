@@ -1,9 +1,11 @@
 #!/bin/bash
+set -e
+
 USER_NAME="${USER:-$(whoami)}"
 HOME_DIR="/home/$USER_NAME"
 
 VSCODE_DIR="$HOME_DIR/vscode-server"
-mkdir "$VSCODE_DIR"
+mkdir -p "$VSCODE_DIR"
 
 echo -n "Set vscode-server password: "
 read -s VSCODE_PASSWORD
@@ -18,8 +20,6 @@ touch "$VSCODE_DIR/docker-compose.yml"
 chmod 600 "$VSCODE_DIR/docker-compose.yml"
 
 cat > "$VSCODE_DIR/docker-compose.yml" << EOFWRAPPER
-version: '3.8'
-
 services:
   vscode-server:
     image: codercom/code-server:latest
