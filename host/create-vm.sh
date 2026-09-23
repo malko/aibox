@@ -37,11 +37,22 @@ NETWORK=$(prompt "Network" "default")
 
 print_info "Creating VM '$VM_NAME'..."
 
-# TODO check for default network or try to create if from virsh net-define /usr/share/libvirt/networks/default.xml
-virsh -c "$LIBVIRT_DEFAULT_URI" net-info default >/dev/null 2>&1 || echo "Error: network 'default' does not exist."
-if [ "$(virsh -c "$LIBVIRT_DEFAULT_URI" net-info default | grep 'Active' | awk '{print $2}')" = "no" ]; then
-    virsh -c "$LIBVIRT_DEFAULT_URI" net-start default
-    echo "Network 'default' started."
+# Ensure the requested network exists; define 'default' from the shipped
+# template when possible, otherwise bail out before the doomed virt-install.
+if ! virsh -c "$LIBVIRT_DEFAULT_URI" net-info "$NETWORK" >/dev/null 2>&1; then
+    DEFAULT_NET_XML="/usr/share/libvirt/networks/default.xml"
+    if [[ "$NETWORK" == "default" && -f "$DEFAULT_NET_XML" ]]; then
+        print_info "Network 'default' does not exist, defining it..."
+        virsh -c "$LIBVIRT_DEFAULT_URI" net-define "$DEFAULT_NET_XML"
+    else
+        print_error "Network '$NETWORK' does not exist."
+        exit 1
+    fi
+fi
+
+if [ "$(virsh -c "$LIBVIRT_DEFAULT_URI" net-info "$NETWORK" | awk '/Active/{print $2}')" = "no" ]; then
+    virsh -c "$LIBVIRT_DEFAULT_URI" net-start "$NETWORK"
+    echo "Network '$NETWORK' started."
 fi
 
 virt-install \
