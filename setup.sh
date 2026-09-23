@@ -281,6 +281,26 @@ print_info "Installing opencode-web service..."
 ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "source ~/.bashrc && ~/scripts/install-service.sh"
 print_success "Service installed!"
 
+INSTALL_DSH=$(prompt_config_yes_no "INSTALL_DSH" "Install dsh (DeepSeek Harness)?" "no")
+save_config "INSTALL_DSH" "$INSTALL_DSH"
+
+if [[ "$INSTALL_DSH" == "yes" ]]; then
+    DSH_PORT=$(prompt_config "DSH_PORT" "dsh-web port" "3080")
+    save_config "DSH_PORT" "$DSH_PORT"
+
+    print_info "Installing dsh..."
+    ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/install-dsh.sh"
+    print_success "dsh installed!"
+
+    print_info "Installing dsh-web service..."
+    ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "source ~/.bashrc && ~/scripts/install-dsh-service.sh $DSH_PORT"
+    print_success "dsh-web service installed!"
+
+    if ! grep -q '"dsh"' "$SERVICES_FILE" 2>/dev/null; then
+        "$SCRIPT_DIR/cmd/service-add" dsh "$DSH_PORT"
+    fi
+fi
+
 ADD_TO_PATH=$(prompt_config_yes_no "ADD_TO_PATH" "Add 'aibox' command to your PATH?" "yes")
 save_config "ADD_TO_PATH" "$ADD_TO_PATH"
 
@@ -341,3 +361,10 @@ echo "  Then open http://localhost:4096"
 echo ""
 print_info "Or directly on the network (requires /etc/hosts or avahi):"
 echo "  http://${HOSTNAME_LOCAL}:4096"
+
+if [[ "${INSTALL_DSH:-no}" == "yes" ]]; then
+    echo ""
+    print_info "To access dsh web interface:"
+    echo "  aibox"
+    echo "  Then open http://localhost:${DSH_PORT}"
+fi

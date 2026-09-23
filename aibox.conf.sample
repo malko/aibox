@@ -24,6 +24,10 @@ CONFIGURE_MOTD="yes"
 INSTALL_DOCKER="yes"
 INSTALL_NPM="yes"
 
+# dsh (DeepSeek Harness) web service
+INSTALL_DSH="no"
+# DSH_PORT="3080"
+
 # Nginx Proxy Manager
 NPM_PORT="8443"
 

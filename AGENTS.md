@@ -38,10 +38,11 @@ This repository contains bash scripts for managing an AI development VM with KVM
 
 ### Linting
 
-Use shellcheck for bash linting:
+Use shellcheck for bash linting. It is installed in the VM by
+`guest/install-deps.sh`; on a host machine install it with apt.
 
 ```bash
-# Install shellcheck
+# Install shellcheck on the host (already present in the VM)
 sudo apt install shellcheck
 
 # Lint a specific script
@@ -257,3 +258,4 @@ shellcheck script.sh
 - `nc` (netcat) - for network checks
 - `systemctl` - for systemd user services
 - `loginctl` - for linger management
+- `shellcheck` - for bash linting (installed in the VM by `guest/install-deps.sh`)

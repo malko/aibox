@@ -10,7 +10,7 @@ fi
 
 if [[ -z "$TARGET" ]]; then
     echo "Usage: $0 <target>"
-    echo "Targets: opencode, opencode-password"
+    echo "Targets: opencode, opencode-password, dsh, vscode-server"
     exit 1
 fi
 
@@ -30,6 +30,18 @@ case "$TARGET" in
     opencode-password)
         "$SCRIPTS_DIR/install-service.sh"
         ;;
+    dsh)
+        echo "Updating dsh..."
+        if ! command -v npm &>/dev/null; then
+            echo "Error: npm not found"
+            exit 1
+        fi
+        npm install -g @deepseek-ai/dsh@latest
+        echo "Restarting dsh-web service..."
+        systemctl --user restart dsh-web.service
+        sleep 2
+        systemctl --user status dsh-web.service --no-pager
+        ;;
     vscode-server)
         cd "$HOME/vscode-server"
         if [[ -f "$HOME/vscode-server/docker-compose.yml" ]]; then
@@ -42,7 +54,7 @@ case "$TARGET" in
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Available targets: opencode, opencode-password, vscode-server"
+        echo "Available targets: opencode, opencode-password, dsh, vscode-server"
         exit 1
         ;;
 esac

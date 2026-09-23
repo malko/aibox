@@ -76,6 +76,7 @@ The `./setup.sh` script automates everything:
 7. Configures LLM providers (Ollama, LM Studio)
 8. Optionally configures virtiofs for git share
 9. Installs opencode-web as systemd service
+10. Optionally installs dsh (DeepSeek Harness) and its dsh-web service
 
 ## Configuration
 
@@ -107,26 +108,28 @@ Edit `~/.config/opencode/opencode.json` in the VM to configure AI providers.
 
 ```
 aibox/
-├── aibox                    # Main CLI (VM + port forwarding + commands)
-├── setup.sh                 # Automated VM setup
-├── cmd/                     # Command scripts
-│   ├── service-add          # Add service
-│   ├── service-remove      # Remove service
-│   ├── service-list        # List services
-│   ├── vm-shutdown         # Shutdown VM
-│   └── vm-snapshot         # Manage snapshots
-├── host/                    # Host-side scripts
-│   ├── create-vm.sh        # Create VM
-│   ├── start-vm.sh         # Start VM
-│   ├── configure-ssh.sh    # SSH setup
-│   └── upload-scripts.sh   # Upload to VM
-├── guest/                   # Guest-side scripts (uploaded to VM)
-│   ├── install-deps.sh     # Install dependencies
-│   ├── install-docker.sh   # Install Docker
-│   ├── install-service.sh  # Install opencode-web service
-│   ├── configure-llm.sh    # Configure LLM providers
+├── aibox                          # Main CLI (VM + port forwarding + commands)
+├── setup.sh                       # Automated VM setup
+├── cmd/                           # Command scripts
+│   ├── service-add                # Add service
+│   ├── service-remove             # Remove service
+│   ├── service-list               # List services
+│   ├── vm-shutdown                # Shutdown VM
+│   └── vm-snapshot                # Manage snapshots
+├── host/                          # Host-side scripts
+│   ├── create-vm.sh               # Create VM
+│   ├── start-vm.sh                # Start VM
+│   ├── configure-ssh.sh           # SSH setup
+│   └── upload-scripts.sh          # Upload to VM
+├── guest/                         # Guest-side scripts (uploaded to VM)
+│   ├── install-deps.sh            # Install dependencies
+│   ├── install-docker.sh          # Install Docker
+│   ├── install-service.sh         # Install opencode-web service
+│   ├── install-dsh.sh             # Install dsh CLI
+│   ├── install-dsh-service.sh     # Install dsh-web service
+│   ├── configure-llm.sh           # Configure LLM providers
 │   └── update-opencode-models.sh  # Sync models
-└── shared-funcs.sh          # Common functions
+└── shared-funcs.sh                # Common functions
 ```
 
 ## Security Notes
