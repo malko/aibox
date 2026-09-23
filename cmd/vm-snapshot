@@ -97,7 +97,7 @@ case "$ACTION" in
 
         echo ""
         echo "VM reverted to '$SNAPSHOT_NAME'."
-        echo "Run './aibox start' to restart the VM."
+        echo "Run './aibox' to restart the VM."
         ;;
 
     *)
