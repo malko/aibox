@@ -151,7 +151,7 @@ _aibox() {
             return 0
             ;;
         create|delete|revert)
-            COMPREPLY=($(compgen -W "$(virsh snapshot-list ai-agentbox --name 2>/dev/null)" -- "${cur}"))
+            COMPREPLY=($(compgen -W "$(virsh snapshot-list aibox --name 2>/dev/null)" -- "${cur}"))
             return 0
             ;;
     esac
