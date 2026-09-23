@@ -63,6 +63,21 @@ sudo apt install virsh libvirt-client
 Note: Snapshots are internal (embedded in qcow2 file). VM must be shut off to create.
 ```
 
+### Updates
+
+```bash
+./aibox update scripts            # Upload the latest scripts to the VM
+./aibox update os                 # apt update + dist-upgrade (interactive)
+./aibox update os -y              # Same, non-interactive
+./aibox update opencode           # Update opencode + restart opencode-web
+./aibox update dsh                # Update dsh + restart dsh-web
+./aibox update vscode-server      # Pull and restart vscode-server
+./aibox update all                # scripts, os, opencode, dsh, vscode-server
+```
+
+`all` stops at the first failure. `opencode-password` is excluded (it is an
+interactive config action).
+
 ## Setup Process
 
 The `./setup.sh` script automates everything:

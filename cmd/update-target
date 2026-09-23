@@ -17,6 +17,7 @@ fi
 TARGET="$1"
 VM_NAME=${2:-$(get_config "VM_NAME" "aibox")}
 GUEST_USER=${3:-$(get_config "GUEST_USER" "aibox")}
+EXTRA_ARGS=("${@:4}")
 
 LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 
@@ -32,11 +33,26 @@ if [[ -z $TARGET ]]; then
     exit 1
 fi
 
-if [[ "$TARGET" == "scripts" ]]; then
-    echo "Updating scripts on VM..."
-    "$SCRIPT_DIR/host/upload-scripts.sh" "$VM_NAME" "$GUEST_IP" "$GUEST_USER"
-    exit $?
+run_target() {
+    local target="$1"
+    if [[ "$target" == "scripts" ]]; then
+        echo "Updating scripts on VM..."
+        "$SCRIPT_DIR/host/upload-scripts.sh" "$VM_NAME" "$GUEST_IP" "$GUEST_USER"
+    else
+        echo "connecting to aibox..."
+        ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/update-target.sh $target ${EXTRA_ARGS[*]}"
+    fi
+}
+
+if [[ "$TARGET" == "all" ]]; then
+    for target in scripts os opencode dsh vscode-server; do
+        echo ""
+        echo "=== Updating: $target ==="
+        run_target "$target" || { echo "Update failed: $target" >&2; exit 1; }
+    done
+    echo ""
+    echo "All updates completed."
+    exit 0
 fi
 
-echo "connecting to aibox..."
-ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/update-target.sh $TARGET"
+run_target "$TARGET"

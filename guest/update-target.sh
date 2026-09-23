@@ -1,6 +1,7 @@
 #!/bin/bash
 
 TARGET="${1:-}"
+EXTRA="${2:-}"
 SCRIPTS_DIR="$HOME/scripts"
 
 NVM_DIR="$HOME/.nvm"
@@ -9,8 +10,8 @@ if [ -d "$NVM_DIR" ]; then
 fi
 
 if [[ -z "$TARGET" ]]; then
-    echo "Usage: $0 <target>"
-    echo "Targets: opencode, opencode-password, dsh, vscode-server"
+    echo "Usage: $0 <target> [options]"
+    echo "Targets: opencode, opencode-password, dsh, os, vscode-server"
     exit 1
 fi
 
@@ -29,6 +30,19 @@ case "$TARGET" in
         ;;
     opencode-password)
         "$SCRIPTS_DIR/install-service.sh"
+        ;;
+    os)
+        echo "Updating system packages..."
+        sudo apt update
+        if [[ "$EXTRA" == "-y" || "$EXTRA" == "--yes" ]]; then
+            echo "Running non-interactive dist-upgrade..."
+            sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get -y dist-upgrade
+        else
+            sudo apt dist-upgrade
+        fi
+        if [[ -f /var/run/reboot-required ]]; then
+            echo "Reboot required."
+        fi
         ;;
     dsh)
         echo "Updating dsh..."
@@ -54,7 +68,7 @@ case "$TARGET" in
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Available targets: opencode, opencode-password, dsh, vscode-server"
+        echo "Available targets: opencode, opencode-password, dsh, os, vscode-server"
         exit 1
         ;;
 esac
