@@ -46,4 +46,13 @@ fi
 
 echo ""
 echo "=== VM updates ==="
+
+# The check script ships with the repo: push it if the VM does not have it yet.
+if ! ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "test -f ~/scripts/update-check.sh" 2>/dev/null; then
+    echo "Uploading update-check.sh to the VM..."
+    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "mkdir -p ~/scripts"
+    scp -o ConnectTimeout=10 "$SCRIPT_DIR/guest/update-check.sh" "$GUEST_USER@$GUEST_IP:~/scripts/"
+    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "chmod +x ~/scripts/update-check.sh"
+fi
+
 ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/update-check.sh --print"
