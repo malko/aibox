@@ -12,6 +12,8 @@ cat > /tmp/motd.sh << 'MOTDEND'
 
 CYAN='\033[0;36m'
 GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
 DIM='\033[0;90m'
 NC='\033[0m'
 
@@ -69,6 +71,30 @@ fi
 if [ "$SHOWN" = true ]; then
     printf "%b\n" "  ${DIM}stop: systemctl --user stop <service>${NC}"
     printf "\n"
+fi
+
+# Update summary, cached by aibox-update-check.service (skip if stale).
+UPDATES_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/aibox/updates"
+if [ -f "$UPDATES_CACHE" ]; then
+    cache_get() { grep "^$1=" "$UPDATES_CACHE" 2>/dev/null | head -n 1 | cut -d= -f2-; }
+
+    TS=$(cache_get TIMESTAMP)
+    APT_COUNT=$(cache_get APT_COUNT)
+    REBOOT=$(cache_get REBOOT)
+    NPM_OUTDATED=$(cache_get NPM_OUTDATED)
+    VSCODE=$(cache_get VSCODE)
+
+    if [ -n "$TS" ] && [ $(( $(date +%s) - TS )) -lt 172800 ]; then
+        if [ "${APT_COUNT:-0}" -gt 0 ] 2>/dev/null || [ -n "$NPM_OUTDATED" ] \
+            || [ "$VSCODE" = "yes" ] || [ "$REBOOT" = "yes" ]; then
+            printf "%b\n" "  ${YELLOW}⚠ Updates available${NC}"
+            [ "${APT_COUNT:-0}" -gt 0 ] 2>/dev/null && printf "    apt: %s package(s) to upgrade\n" "$APT_COUNT"
+            [ -n "$NPM_OUTDATED" ] && printf "    npm: %s\n" "$NPM_OUTDATED"
+            [ "$VSCODE" = "yes" ] && printf "    vscode-server: update available\n"
+            [ "$REBOOT" = "yes" ] && printf "%b\n" "    ${RED}reboot required${NC}"
+            printf "\n"
+        fi
+    fi
 fi
 MOTDEND
 

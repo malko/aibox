@@ -28,6 +28,9 @@ INSTALL_NPM="yes"
 INSTALL_DSH="no"
 # DSH_PORT="3080"
 
+# Automatic update check (boot + daily, shown in the MOTD)
+INSTALL_UPDATE_CHECK="yes"
+
 # Nginx Proxy Manager
 NPM_PORT="8443"
 

@@ -29,6 +29,8 @@ scp -o ConnectTimeout=10 \
     "$SCRIPT_DIR/guest/install-service.sh" \
     "$SCRIPT_DIR/guest/install-dsh.sh" \
     "$SCRIPT_DIR/guest/install-dsh-service.sh" \
+    "$SCRIPT_DIR/guest/update-check.sh" \
+    "$SCRIPT_DIR/guest/install-update-check.sh" \
     "$SCRIPT_DIR/guest/install-vscode.sh" \
     "$SCRIPT_DIR/guest/configure-motd.sh" \
     "$SCRIPT_DIR/guest/configure-sshd.sh" \

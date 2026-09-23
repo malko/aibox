@@ -75,6 +75,7 @@ Note: Snapshots are internal (embedded in qcow2 file). VM must be shut off to cr
 ./aibox update dsh                # Update dsh + restart dsh-web
 ./aibox update vscode-server      # Pull and restart vscode-server
 ./aibox update all                # scripts, os, opencode, dsh, vscode-server
+./aibox check-updates             # Check for updates (aibox repo + VM)
 ```
 
 `all` stops at the first failure. `opencode-password` is excluded (it is an
@@ -94,6 +95,7 @@ The `./setup.sh` script automates everything:
 8. Optionally configures virtiofs for git share
 9. Installs opencode-web as systemd service
 10. Optionally installs dsh (DeepSeek Harness) and its dsh-web service
+11. Installs an automatic update check (at boot and daily, shown in the MOTD)
 
 ## Configuration
 
@@ -131,6 +133,9 @@ aibox/
 │   ├── service-add                # Add service
 │   ├── service-remove             # Remove service
 │   ├── service-list               # List services
+│   ├── update-models              # Sync OpenCode models
+│   ├── update-target              # Dispatch an update target
+│   ├── check-updates              # Check for available updates
 │   ├── vm-shutdown                # Shutdown VM
 │   ├── vm-restart                 # Restart VM
 │   └── vm-snapshot                # Manage snapshots
@@ -145,6 +150,8 @@ aibox/
 │   ├── install-service.sh         # Install opencode-web service
 │   ├── install-dsh.sh             # Install dsh CLI
 │   ├── install-dsh-service.sh     # Install dsh-web service
+│   ├── update-check.sh            # Gather available updates
+│   ├── install-update-check.sh    # Install the update check timer
 │   ├── configure-llm.sh           # Configure LLM providers
 │   └── update-opencode-models.sh  # Sync models
 └── shared-funcs.sh                # Common functions

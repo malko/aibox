@@ -25,6 +25,7 @@ usage() {
     echo "  relay                             Enable/disable peon-ping relay by default"
     echo "  update-models                     Update OpenCode models from LLM providers"
     echo "  update <target>                   Update (opencode, opencode-password, dsh, os, scripts, vscode-server, all)"
+    echo "  check-updates                     Check for available updates (host + VM)"
     echo "  shutdown [-f]                     Shutdown VM (use -f to force)"
     echo "  restart [-f]                      Restart VM (use -f to force shutdown)"
     echo "  snapshot create [name]            Create snapshot"
@@ -76,6 +77,7 @@ commands=(
   'service-list:list configured services'
   'update-models:update OpenCode models from LLM providers'
   'update:update service or app (opencode, opencode-password, dsh, os, scripts, vscode-server, all)'
+  'check-updates:check for available updates (host + VM)'
   'shutdown:shutdown VM'
   'restart:restart VM'
   'snapshot:manage snapshots'
@@ -124,7 +126,7 @@ _aibox() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="service-add service-remove service-list update-models update shutdown restart snapshot"
+    opts="service-add service-remove service-list update-models update check-updates shutdown restart snapshot"
 
     case "${prev}" in
         aibox)
@@ -281,6 +283,10 @@ case "$1" in
             exit 1
         fi
         "$CMD_DIR/update-target" "$TARGET" "$VM_NAME" "$GUEST_USER" "${@:3}"
+        exit $?
+        ;;
+    check-updates)
+        "$CMD_DIR/check-updates" "$VM_NAME" "$GUEST_USER"
         exit $?
         ;;
     shutdown)

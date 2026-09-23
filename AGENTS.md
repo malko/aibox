@@ -28,6 +28,10 @@ This repository contains bash scripts for managing an AI development VM with KVM
 ./aibox service-list
 ./aibox service-remove opencode
 
+# Updates
+./aibox update all
+./aibox check-updates
+
 # VM management
 ./aibox shutdown
 ./aibox shutdown -f

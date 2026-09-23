@@ -301,6 +301,15 @@ if [[ "$INSTALL_DSH" == "yes" ]]; then
     fi
 fi
 
+INSTALL_UPDATE_CHECK=$(prompt_config_yes_no "INSTALL_UPDATE_CHECK" "Install automatic update check?" "yes")
+save_config "INSTALL_UPDATE_CHECK" "$INSTALL_UPDATE_CHECK"
+
+if [[ "$INSTALL_UPDATE_CHECK" == "yes" ]]; then
+    print_info "Installing update check service..."
+    ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/install-update-check.sh"
+    print_success "Update check service installed!"
+fi
+
 ADD_TO_PATH=$(prompt_config_yes_no "ADD_TO_PATH" "Add 'aibox' command to your PATH?" "yes")
 save_config "ADD_TO_PATH" "$ADD_TO_PATH"
 
