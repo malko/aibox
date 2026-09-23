@@ -380,7 +380,7 @@ fi
 
 # Open browser if -w flag is set
 if [[ "$OPEN_WEB" == "true" ]]; then
-    HOST_PORT="$1"
+    HOST_PORT="${1%%:*}"
     HOSTNAME_LOCAL=$(hostname).local
     BROWSER_URL="http://${HOSTNAME_LOCAL}:${HOST_PORT}"
 
