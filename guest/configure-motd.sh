@@ -39,8 +39,10 @@ is_service_active() {
 }
 
 # last_url <unit> [filter] -> most recent URL found in the unit's journal.
+# Only the last 500 lines are scanned: reading the whole journal of a verbose
+# service (opencode) costs several seconds at every login.
 last_url() {
-    journalctl --user -u "$1" --no-pager -o cat 2>/dev/null \
+    journalctl --user -u "$1" -n 500 --no-pager -o cat 2>/dev/null \
         | tr -d '\033' \
         | grep -E "${2:-}" \
         | grep -oE 'https?://[^[:space:]"]+' \
