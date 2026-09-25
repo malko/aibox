@@ -70,6 +70,16 @@ if is_service_active dsh-web.service; then
     fi
 fi
 
+# vscode-server runs as a Docker container (codercom/code-server).
+if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx vscode-server; then
+    # Published host port for the container's 8080/tcp (e.g. 0.0.0.0:8081->8080/tcp).
+    VSCODE_PORT=$(docker port vscode-server 8080/tcp 2>/dev/null | head -n 1 | sed 's/.*://')
+    if [ -n "$VSCODE_PORT" ]; then
+        SHOWN=true
+        printf "%b\n" "  ${GREEN}●${NC} vscode-server ${CYAN}http://localhost:${VSCODE_PORT}${NC}"
+    fi
+fi
+
 if [ "$SHOWN" = true ]; then
     printf "%b\n" "  ${DIM}stop: systemctl --user stop <service>${NC}"
     printf "\n"
