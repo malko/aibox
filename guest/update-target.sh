@@ -17,6 +17,10 @@ fi
 
 case "$TARGET" in
     opencode)
+        if ! command -v opencode &>/dev/null; then
+            echo "opencode not installed, skipping"
+            exit 0
+        fi
         echo "Updating opencode..."
         if ! command -v npm &>/dev/null; then
             echo "Error: npm not found"
@@ -45,6 +49,10 @@ case "$TARGET" in
         fi
         ;;
     dsh)
+        if ! command -v dsh &>/dev/null; then
+            echo "dsh not installed, skipping"
+            exit 0
+        fi
         echo "Updating dsh..."
         if ! command -v npm &>/dev/null; then
             echo "Error: npm not found"
