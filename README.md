@@ -84,19 +84,25 @@ interactive config action).
 
 ## Setup Process
 
-The `./setup.sh` script automates everything:
+The `./setup.sh` script (also available as `aibox setup`) runs the VM setup as
+independent, replayable steps. Prerequisites of a step are run automatically,
+so you can re-run just one part without redoing everything.
 
-1. Creates VM if needed
-2. Starts VM and configures SSH
-3. Uploads scripts to VM
-4. Installs dependencies (nvm, node, opencode)
-5. Configures Git, MOTD
-6. Optionally installs Docker
-7. Configures LLM providers (Ollama, LM Studio)
-8. Optionally configures virtiofs for git share
-9. Installs opencode-web as systemd service
-10. Optionally installs dsh (DeepSeek Harness) and its dsh-web service
-11. Installs an automatic update check (at boot and daily, shown in the MOTD)
+```bash
+./setup.sh                    # Run every step ('all')
+./setup.sh motd               # Reconfigure the MOTD only
+./setup.sh dsh                # Install dsh and its web service
+./setup.sh motd dsh           # Several steps in one run
+aibox setup motd              # Same, through the main CLI
+./setup.sh --help             # List all steps
+```
+
+Steps (in order): `vm`, `ssh`, `scripts`, `deps`, `sshd`, `git`, `dirs`,
+`hosts`, `motd`, `docker`, `vscode`, `opencode`, `dsh`, `update-check`,
+`virtiofs`, `cli`. Each step is implemented in `setup/steps/`.
+
+Answers are stored in the config file and reused as defaults; a step only
+prompts for the values it needs.
 
 ## Configuration
 
@@ -128,35 +134,35 @@ Edit `~/.config/opencode/opencode.json` in the VM to configure AI providers.
 
 ```
 aibox/
-├── aibox                          # Main CLI (VM + port forwarding + commands)
-├── setup.sh                       # Automated VM setup
-├── cmd/                           # Command scripts
-│   ├── service-add                # Add service
-│   ├── service-remove             # Remove service
-│   ├── service-list               # List services
-│   ├── update-models              # Sync OpenCode models
-│   ├── update-target              # Dispatch an update target
-│   ├── check-updates              # Check for available updates
-│   ├── self-update                # Pull the repo and push scripts to the VM
-│   ├── vm-shutdown                # Shutdown VM
-│   ├── vm-restart                 # Restart VM
-│   └── vm-snapshot                # Manage snapshots
-├── host/                          # Host-side scripts
-│   ├── create-vm.sh               # Create VM
-│   ├── start-vm.sh                # Start VM
-│   ├── configure-ssh.sh           # SSH setup
-│   └── upload-scripts.sh          # Upload to VM
-├── guest/                         # Guest-side scripts (uploaded to VM)
-│   ├── install-deps.sh            # Install dependencies
-│   ├── install-docker.sh          # Install Docker
-│   ├── install-service.sh         # Install opencode-web service
-│   ├── install-dsh.sh             # Install dsh CLI
-│   ├── install-dsh-service.sh     # Install dsh-web service
-│   ├── update-check.sh            # Gather available updates
-│   ├── install-update-check.sh    # Install the update check timer
-│   ├── configure-llm.sh           # Configure LLM providers
-│   └── update-opencode-models.sh  # Sync models
-└── shared-funcs.sh                # Common functions
+├── aibox                        # Main CLI (VM + port forwarding + commands)
+├── setup.sh                     # Setup runner (steps, with prerequisites)
+├── setup/                       # Modular setup
+│   ├── lib.sh                   # Step registry, prerequisites, runner
+│   └── steps/                   # One script per step (vm, ssh, motd, dsh, ...)
+├── cmd/                         # Command scripts
+│   ├── service-add              # Add service
+│   ├── service-remove           # Remove service
+│   ├── service-list             # List services
+│   ├── update-target            # Dispatch an update target
+│   ├── check-updates            # Check for available updates
+│   ├── self-update              # Pull the repo and push scripts to the VM
+│   ├── vm-shutdown              # Shutdown VM
+│   ├── vm-restart               # Restart VM
+│   └── vm-snapshot              # Manage snapshots
+├── host/                        # Host-side scripts
+│   ├── create-vm.sh             # Create VM
+│   ├── start-vm.sh              # Start VM
+│   ├── configure-ssh.sh         # SSH setup
+│   └── upload-scripts.sh        # Upload to VM
+├── guest/                       # Guest-side scripts (uploaded to VM)
+│   ├── install-deps.sh          # Install dependencies
+│   ├── install-docker.sh        # Install Docker
+│   ├── install-service.sh       # Install opencode-web service
+│   ├── install-dsh.sh           # Install dsh CLI
+│   ├── install-dsh-service.sh   # Install dsh-web service
+│   ├── update-check.sh          # Gather available updates
+│   └── install-update-check.sh  # Install the update check timer
+└── shared-funcs.sh              # Common functions
 ```
 
 ## Security Notes

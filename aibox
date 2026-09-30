@@ -23,7 +23,7 @@ usage() {
     echo "  service-remove <name>             Remove a service"
     echo "  service-list                      List configured services"
     echo "  relay                             Enable/disable peon-ping relay by default"
-    echo "  update-models                     Update OpenCode models from LLM providers"
+    echo "  setup [step ...]                  Run setup steps (see 'aibox setup --help')"
     echo "  update <target>                   Update (opencode, opencode-password, dsh, os, scripts, vscode-server, all)"
     echo "  check-updates                     Check for available updates (host + VM)"
     echo "  self-update                       Pull the aibox repo and push scripts to the VM"
@@ -38,7 +38,7 @@ usage() {
     echo "  aibox                                Connect with all services"
     echo "  aibox -c /path/to/config.conf        Use custom config file"
     echo "  aibox service-add opencode 4096      Add opencode service"
-    echo "  aibox update-models                  Update OpenCode models"
+    echo "  aibox setup motd                     Reconfigure the MOTD only"
     echo "  aibox update opencode                Update and restart opencode"
     echo "  aibox update opencode-password       Set opencode password"
     echo "  aibox update scripts                 Upload scripts to VM"
@@ -76,7 +76,7 @@ commands=(
   'service-add:add a service'
   'service-remove:remove a service'
   'service-list:list configured services'
-  'update-models:update OpenCode models from LLM providers'
+  'setup:run setup steps'
   'update:update service or app (opencode, opencode-password, dsh, os, scripts, vscode-server, all)'
   'check-updates:check for available updates (host + VM)'
   'self-update:pull the aibox repo and push scripts to the VM'
@@ -112,6 +112,9 @@ case $state in
       shutdown|restart)
         _values 'flags' '-f --force'
         ;;
+      setup)
+        _values 'steps' $(aibox --setup-steps) all
+        ;;
       update)
         _values 'targets' 'opencode' 'opencode-password' 'dsh' 'os' 'scripts' 'vscode-server' 'all'
         ;;
@@ -128,7 +131,7 @@ _aibox() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="service-add service-remove service-list update-models update check-updates self-update shutdown restart snapshot"
+    opts="service-add service-remove service-list setup update check-updates self-update shutdown restart snapshot"
 
     case "${prev}" in
         aibox)
@@ -136,6 +139,10 @@ _aibox() {
             return 0
             ;;
         service-add)
+            return 0
+            ;;
+        setup)
+            COMPREPLY=($(compgen -W "$(aibox --setup-steps) all" -- "${cur}"))
             return 0
             ;;
         service-remove)
@@ -172,6 +179,12 @@ BASHEOF
     fi
 }
 
+# 'setup' relays its arguments verbatim to setup.sh (it has its own options).
+if [[ "${1:-}" == "setup" ]]; then
+    shift
+    exec "$SCRIPT_DIR/setup.sh" "$@"
+fi
+
 # --- Argument Parsing ---
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -201,6 +214,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         --completion)
             completion "${2:-}"
+            exit 0
+            ;;
+        --setup-steps)
+            source "$SCRIPT_DIR/setup/lib.sh"
+            printf '%s\n' "${SETUP_STEP_ORDER[@]}"
             exit 0
             ;;
         --)
@@ -271,10 +289,6 @@ case "$1" in
                 ;;
         esac
         exit 0
-        ;;
-    update-models)
-        "$CMD_DIR/update-models" "$VM_NAME" "${2:-}" "$GUEST_USER"
-        exit $?
         ;;
     update)
         TARGET="$2"

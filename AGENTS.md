@@ -7,7 +7,9 @@ This repository contains bash scripts for managing an AI development VM with KVM
 - **Type**: Bash scripts collection (no build system, no tests)
 - **Main Scripts**:
   - `aibox` - Main CLI for VM management and port forwarding
-  - `setup.sh` - Automated VM setup
+  - `setup.sh` - Setup runner (also `aibox setup`)
+  - `setup/lib.sh` - Step registry and prerequisite resolution
+  - `setup/steps/*.sh` - One self-contained step per file
   - `cmd/` - Service and VM management commands
 
 ## Commands
@@ -15,8 +17,11 @@ This repository contains bash scripts for managing an AI development VM with KVM
 ### Running Scripts
 
 ```bash
-# Setup VM
+# Setup VM (all steps, or a single replayable step)
 ./setup.sh
+./setup.sh motd                 # re-run one step (prerequisites auto-run)
+./setup.sh dsh motd
+./aibox setup motd              # same, via the CLI
 
 # Connect to VM with port forwarding
 ./aibox

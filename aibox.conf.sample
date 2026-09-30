@@ -31,16 +31,6 @@ INSTALL_DSH="no"
 # Automatic update check (boot + daily, shown in the MOTD)
 INSTALL_UPDATE_CHECK="yes"
 
-# Nginx Proxy Manager
-NPM_PORT="8443"
-
-# LLM Providers
-CONFIGURE_OLLAMA="no"
-# OLLAMA_URL="http://hostname.local:11434"
-
-CONFIGURE_LMS="no"
-# LMS_URL="http://hostname.local:1234"
-
 # Virtiofs (git share with host)
 CONFIGURE_VIRTIOFS="no"
 # HOST_SHARE_DIR="$HOME/git"
