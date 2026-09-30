@@ -303,6 +303,22 @@ case "$1" in
         ;;
 esac
 
+# Validate remaining positional arguments: they must be ports (or host:guest
+# pairs). Anything else is most likely a mistyped command.
+for arg in "$@"; do
+    if [[ "$arg" == *:* ]]; then
+        if [[ ! "$arg" =~ ^[0-9]+:[0-9]+$ ]]; then
+            print_error "Invalid port mapping '$arg'. Expected <host_port>:<guest_port>."
+            echo "Run 'aibox --help' for usage." >&2
+            exit 1
+        fi
+    elif [[ ! "$arg" =~ ^[0-9]+$ ]]; then
+        print_error "Unknown command or invalid port: '$arg'"
+        echo "Run 'aibox --help' for usage." >&2
+        exit 1
+    fi
+done
+
 
 # Load services from config (skip if --no-service)
 if [[ "$NO_SERVICE" == "false" ]]; then
