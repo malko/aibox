@@ -116,7 +116,7 @@ Main config is at `~/.config/aibox/aibox.conf`:
 
 ```
 VM_NAME="ai-agentbox"
-GUEST_USER="malko"
+GUEST_USER="aibox"
 ```
 
 ### OpenCode Config

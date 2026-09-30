@@ -16,7 +16,7 @@ PEON_RELAY=false
 POSITIONAL_ARGS=()
 
 usage() {
-    echo "Usage: $0 [options] [service] [host_port:guest_port] [port] ..."
+    echo "Usage: aibox [options] [service] [host_port:guest_port] [port] ..."
     echo ""
     echo "Commands:"
     echo "  service-add <name> <port[:port]>  Add a service"
@@ -34,16 +34,16 @@ usage() {
     echo "  snapshot revert <name>            Revert to snapshot"
     echo ""
     echo "Examples:"
-    echo "  $0                                Connect with all services"
-    echo "  $0 -c /path/to/config.conf        Use custom config file"
-    echo "  $0 service-add opencode 4096      Add opencode service"
-    echo "  $0 update-models                  Update OpenCode models"
-    echo "  $0 update opencode                Update and restart opencode"
-    echo "  $0 update opencode-password       Set opencode password"
-    echo "  $0 update scripts                 Upload scripts to VM"
-    echo "  $0 shutdown                       Gracefully shutdown VM"
-    echo "  $0 restart                        Restart VM"
-    echo "  $0 snapshot create                Create snapshot with auto name"
+    echo "  aibox                                Connect with all services"
+    echo "  aibox -c /path/to/config.conf        Use custom config file"
+    echo "  aibox service-add opencode 4096      Add opencode service"
+    echo "  aibox update-models                  Update OpenCode models"
+    echo "  aibox update opencode                Update and restart opencode"
+    echo "  aibox update opencode-password       Set opencode password"
+    echo "  aibox update scripts                 Upload scripts to VM"
+    echo "  aibox shutdown                       Gracefully shutdown VM"
+    echo "  aibox restart                        Restart VM"
+    echo "  aibox snapshot create                Create snapshot with auto name"
     echo ""
     echo "Options:"
     echo "  -c, --config FILE    Path to config file (default: ~/.config/aibox/aibox.conf)"
@@ -264,7 +264,7 @@ case "$1" in
                 echo "Peon relay disabled in config."
                 ;;
             *)
-                echo "Usage: $0 relay [on|off]"
+                echo "Usage: aibox relay [on|off]"
                 exit 1
                 ;;
         esac
@@ -277,7 +277,7 @@ case "$1" in
     update)
         TARGET="$2"
         if [[ -z "$TARGET" ]]; then
-            echo "Usage: $0 update <target> [options]"
+            echo "Usage: aibox update <target> [options]"
             echo "Targets: opencode, opencode-password, dsh, os, scripts, vscode-server, all"
             echo "Options: -y, --yes    Non-interactive system upgrade (os/all)"
             exit 1
@@ -337,7 +337,7 @@ if [[ "$NO_SERVICE" == "false" ]]; then
     if [[ ${#ALL_PORTS[@]} -eq 0 && ${#SERVICES[@]} -gt 0 ]]; then
         set -- "${SERVICES[@]}"
     elif [[ ${#ALL_PORTS[@]} -eq 0 ]]; then
-        echo "No services configured. Add one with: $0 service-add <name> <port>"
+        echo "No services configured. Add one with: aibox service-add <name> <port>"
         exit 1
     else
         set -- "${ALL_PORTS[@]}"
