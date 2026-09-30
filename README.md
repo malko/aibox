@@ -76,6 +76,7 @@ Note: Snapshots are internal (embedded in qcow2 file). VM must be shut off to cr
 ./aibox update vscode-server      # Pull and restart vscode-server
 ./aibox update all                # scripts, os, opencode, dsh, vscode-server
 ./aibox check-updates             # Check for updates (aibox repo + VM)
+./aibox self-update               # Pull the aibox repo and push scripts to the VM
 ```
 
 `all` stops at the first failure. `opencode-password` is excluded (it is an
@@ -136,6 +137,7 @@ aibox/
 │   ├── update-models              # Sync OpenCode models
 │   ├── update-target              # Dispatch an update target
 │   ├── check-updates              # Check for available updates
+│   ├── self-update                # Pull the repo and push scripts to the VM
 │   ├── vm-shutdown                # Shutdown VM
 │   ├── vm-restart                 # Restart VM
 │   └── vm-snapshot                # Manage snapshots

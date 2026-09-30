@@ -26,7 +26,7 @@ if git -C "$SCRIPT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
     if [[ -n "$UPSTREAM" ]]; then
         BEHIND=$(git -C "$SCRIPT_DIR" rev-list --count 'HEAD..@{u}' 2>/dev/null || echo 0)
         if [[ "$BEHIND" -gt 0 ]]; then
-            echo "  $BEHIND commit(s) behind $UPSTREAM"
+            echo "  $BEHIND commit(s) behind $UPSTREAM (run 'aibox self-update')"
         else
             echo "  up to date"
         fi

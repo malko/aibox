@@ -1,0 +1,69 @@
+#!/bin/bash
+set -e
+
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_SOURCE" ]]; do
+    SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
+CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
+source "$SCRIPT_DIR/config-funcs.sh"
+init_config_file
+
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+fi
+
+VM_NAME=${1:-$(get_config "VM_NAME" "aibox")}
+GUEST_USER=${2:-$(get_config "GUEST_USER" "aibox")}
+LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
+
+if ! git -C "$SCRIPT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+    echo "Error: $SCRIPT_DIR is not a git checkout."
+    exit 1
+fi
+
+echo "=== Self-update (aibox repository) ==="
+
+BEFORE=$(git -C "$SCRIPT_DIR" rev-parse HEAD)
+
+echo "Fetching..."
+git -C "$SCRIPT_DIR" fetch --quiet
+
+UPSTREAM=$(git -C "$SCRIPT_DIR" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || echo "")
+if [[ -z "$UPSTREAM" ]]; then
+    echo "No upstream configured. Nothing to pull."
+    exit 0
+fi
+
+BEHIND=$(git -C "$SCRIPT_DIR" rev-list --count 'HEAD..@{u}')
+if [[ "$BEHIND" -eq 0 ]]; then
+    echo "Already up to date ($BEFORE)."
+    exit 0
+fi
+
+echo "$BEHIND commit(s) available on $UPSTREAM, pulling..."
+git -C "$SCRIPT_DIR" pull --ff-only
+
+AFTER=$(git -C "$SCRIPT_DIR" rev-parse HEAD)
+echo "Updated $BEFORE -> $AFTER"
+
+# The repo may be shared with the VM (virtiofs) but scripts live in ~/scripts:
+# re-upload when the guest scripts changed between the two revisions.
+SCRIPTS_CHANGED=$(git -C "$SCRIPT_DIR" diff --name-only "$BEFORE" "$AFTER" -- guest shared-funcs.sh host | head -1)
+
+if [[ -z "$SCRIPTS_CHANGED" ]]; then
+    echo "No script changes to push to the VM."
+    exit 0
+fi
+
+GUEST_IP=$(virsh -c "$LIBVIRT_DEFAULT_URI" domifaddr "$VM_NAME" --source lease 2>/dev/null | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)
+
+if [[ -z "$GUEST_IP" ]]; then
+    echo "Scripts changed, but VM '$VM_NAME' is not running: run 'aibox update scripts' later."
+    exit 0
+fi
+
+echo "Scripts changed, uploading to the VM..."
+"$SCRIPT_DIR/host/upload-scripts.sh" "$VM_NAME" "$GUEST_IP" "$GUEST_USER"
+echo "Self-update completed."

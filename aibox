@@ -26,6 +26,7 @@ usage() {
     echo "  update-models                     Update OpenCode models from LLM providers"
     echo "  update <target>                   Update (opencode, opencode-password, dsh, os, scripts, vscode-server, all)"
     echo "  check-updates                     Check for available updates (host + VM)"
+    echo "  self-update                       Pull the aibox repo and push scripts to the VM"
     echo "  shutdown [-f]                     Shutdown VM (use -f to force)"
     echo "  restart [-f]                      Restart VM (use -f to force shutdown)"
     echo "  snapshot create [name]            Create snapshot"
@@ -78,6 +79,7 @@ commands=(
   'update-models:update OpenCode models from LLM providers'
   'update:update service or app (opencode, opencode-password, dsh, os, scripts, vscode-server, all)'
   'check-updates:check for available updates (host + VM)'
+  'self-update:pull the aibox repo and push scripts to the VM'
   'shutdown:shutdown VM'
   'restart:restart VM'
   'snapshot:manage snapshots'
@@ -126,7 +128,7 @@ _aibox() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="service-add service-remove service-list update-models update check-updates shutdown restart snapshot"
+    opts="service-add service-remove service-list update-models update check-updates self-update shutdown restart snapshot"
 
     case "${prev}" in
         aibox)
@@ -287,6 +289,10 @@ case "$1" in
         ;;
     check-updates)
         "$CMD_DIR/check-updates" "$VM_NAME" "$GUEST_USER"
+        exit $?
+        ;;
+    self-update)
+        "$CMD_DIR/self-update" "$VM_NAME" "$GUEST_USER"
         exit $?
         ;;
     shutdown)

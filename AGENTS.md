@@ -31,6 +31,7 @@ This repository contains bash scripts for managing an AI development VM with KVM
 # Updates
 ./aibox update all
 ./aibox check-updates
+./aibox self-update
 
 # VM management
 ./aibox shutdown
