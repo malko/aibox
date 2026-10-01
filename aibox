@@ -12,6 +12,7 @@ CMD_DIR="$SCRIPT_DIR/cmd"
 CONFIG_FILE=""
 OPEN_WEB=false
 NO_SERVICE=false
+LAN_EXPOSE=false
 PEON_RELAY=false
 POSITIONAL_ARGS=()
 
@@ -19,6 +20,9 @@ usage() {
     echo "Usage: aibox [options] [service] [host_port:guest_port] [port] ..."
     echo ""
     echo "Commands:"
+    echo "  start                             Start the VM and the tunnel service"
+    echo "  status                            VM state, service URLs and tunnel state"
+    echo "  tunnel <command>                  Manage the tunnel service (see 'aibox tunnel help')"
     echo "  service-add <name> <port[:port]>  Add a service"
     echo "  service-remove <name>             Remove a service"
     echo "  service-list                      List configured services"
@@ -27,15 +31,18 @@ usage() {
     echo "  update <target>                   Update (opencode, opencode-password, dsh, os, scripts, vscode-server, all)"
     echo "  check-updates                     Check for available updates (host + VM)"
     echo "  self-update                       Pull the aibox repo and push scripts to the VM"
-    echo "  shutdown [-f]                     Shutdown VM (use -f to force)"
-    echo "  restart [-f]                      Restart VM (use -f to force shutdown)"
+    echo "  shutdown [-f]                     Stop tunnel + shutdown VM (use -f to force)"
+    echo "  restart [-f]                      Restart VM (tunnel reconnects automatically)"
     echo "  snapshot create [name]            Create snapshot"
     echo "  snapshot list                     List snapshots"
     echo "  snapshot delete <name>            Delete snapshot"
     echo "  snapshot revert <name>            Revert to snapshot"
     echo ""
     echo "Examples:"
-    echo "  aibox                                Connect with all services"
+    echo "  aibox                                Connect and open a shell"
+    echo "  aibox start                          Start VM + tunnel without connecting"
+    echo "  aibox status                         Show VM, URLs and tunnel state"
+    echo "  aibox tunnel lan on                  Expose services on the LAN"
     echo "  aibox -c /path/to/config.conf        Use custom config file"
     echo "  aibox service-add opencode 4096      Add opencode service"
     echo "  aibox setup motd                     Reconfigure the MOTD only"
@@ -50,6 +57,7 @@ usage() {
     echo "  -c, --config FILE    Path to config file (default: ~/.config/aibox/aibox.conf)"
     echo "  -w, --open-web       Open browser after connecting"
     echo "  -n, --no-service     Start without SSH tunnels (no port forwarding)"
+    echo "      --lan            Bind ad-hoc forwarded ports on the LAN (0.0.0.0)"
     echo "  -p, --peon-relay     Enable peon-ping relay (port 19998)"
     echo "  -h, --help           Show this help"
     echo "  --completion [shell] Output shell completion script (bash or zsh)"
@@ -73,6 +81,9 @@ completion() {
 
 local -a commands
 commands=(
+  'start:start VM and tunnel'
+  'status:show VM, URLs and tunnel state'
+  'tunnel:manage the tunnel service'
   'service-add:add a service'
   'service-remove:remove a service'
   'service-list:list configured services'
@@ -95,6 +106,9 @@ case $state in
     case $words[1] in
       service-add)
         _message 'service name'
+        ;;
+      tunnel)
+        _values 'tunnel command' start stop restart status logs install uninstall 'lan on' 'lan off'
         ;;
       service-remove)
         _values 'services' $(jq -r 'keys[]' ~/.config/aibox/services.json 2>/dev/null)
@@ -131,7 +145,7 @@ _aibox() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="service-add service-remove service-list setup update check-updates self-update shutdown restart snapshot"
+    opts="start status tunnel service-add service-remove service-list setup update check-updates self-update shutdown restart snapshot"
 
     case "${prev}" in
         aibox)
@@ -139,6 +153,10 @@ _aibox() {
             return 0
             ;;
         service-add)
+            return 0
+            ;;
+        tunnel)
+            COMPREPLY=($(compgen -W "start stop restart status logs install uninstall lan" -- "${cur}"))
             return 0
             ;;
         setup)
@@ -205,6 +223,10 @@ while [[ $# -gt 0 ]]; do
             NO_SERVICE=true
             shift
             ;;
+        --lan)
+            LAN_EXPOSE=true
+            shift
+            ;;
         -p|--peon-relay)
             PEON_RELAY=true
             shift
@@ -253,11 +275,26 @@ SERVICES_FILE="${HOME}/.config/aibox/services.json"
 LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 [[ "$PEON_RELAY" == "false" ]] && PEON_RELAY=$(get_config "PEON_RELAY" "false")
 
+# VM helpers (the macOS branch replaces this with host/backend.sh).
+source "$SCRIPT_DIR/host/vm.sh"
+
 # Handle commands
 case "$1" in
     help)
         usage
         exit 0
+        ;;
+    start)
+        "$CMD_DIR/start"
+        exit $?
+        ;;
+    status)
+        "$CMD_DIR/status"
+        exit $?
+        ;;
+    tunnel)
+        "$CMD_DIR/tunnel" "${@:2}"
+        exit $?
         ;;
     service-add)
         "$CMD_DIR/service-add" "${@:2}"
@@ -310,12 +347,21 @@ case "$1" in
         exit $?
         ;;
     shutdown)
+        # Stop the tunnel first so it does not sit waiting for the VM, then
+        # shut the VM down. 'aibox start' brings both back.
+        "$CMD_DIR/tunnel" stop >/dev/null 2>&1 || true
         "$CMD_DIR/vm-shutdown" "$VM_NAME" "${2:-}"
         exit $?
         ;;
     restart)
+        # The tunnel is an SSH connection into the VM: it drops when the VM
+        # restarts and reconnects by itself (bounded wait in host/tunnel.sh).
         "$CMD_DIR/vm-restart" "$VM_NAME" "${2:-}"
-        exit $?
+        RESTART_RC=$?
+        if [[ $RESTART_RC -eq 0 ]]; then
+            "$CMD_DIR/tunnel" ensure >/dev/null 2>&1 || true
+        fi
+        exit $RESTART_RC
         ;;
     snapshot)
         "$CMD_DIR/vm-snapshot" "${@:2}"
@@ -341,45 +387,70 @@ done
 
 
 # Load services from config (skip if --no-service)
+CLI_PORTS=("$@")
+
+# When the tunnel service is installed, configured services are exposed by the
+# service; the SSH session only carries ad-hoc ports from the command line.
+TUNNEL_INSTALLED=false
+if "$CMD_DIR/tunnel" installed >/dev/null 2>&1; then
+    TUNNEL_INSTALLED=true
+fi
+
 if [[ "$NO_SERVICE" == "false" ]]; then
-    SERVICES=()
-    while IFS= read -r port; do
-        [[ -n "$port" ]] && SERVICES+=("$port")
-    done < <(load_services)
-
-    # Merge command line args with services
-    ALL_PORTS=("${SERVICES[@]}")
-    for arg in "$@"; do
-        ALL_PORTS+=("$arg")
-    done
-
-    # Use all ports or default to services
-    if [[ ${#ALL_PORTS[@]} -eq 0 && ${#SERVICES[@]} -gt 0 ]]; then
-        set -- "${SERVICES[@]}"
-    elif [[ ${#ALL_PORTS[@]} -eq 0 ]]; then
-        echo "No services configured. Add one with: aibox service-add <name> <port>"
-        exit 1
+    if [[ "$TUNNEL_INSTALLED" == "true" ]]; then
+        set -- "${CLI_PORTS[@]}"
     else
-        set -- "${ALL_PORTS[@]}"
+        SERVICES=()
+        while IFS= read -r port; do
+            [[ -n "$port" ]] && SERVICES+=("$port")
+        done < <(load_services)
+
+        # Merge command line args with services
+        ALL_PORTS=("${SERVICES[@]}")
+        for arg in "${CLI_PORTS[@]}"; do
+            ALL_PORTS+=("$arg")
+        done
+
+        # Use all ports or default to services
+        if [[ ${#ALL_PORTS[@]} -eq 0 && ${#SERVICES[@]} -gt 0 ]]; then
+            set -- "${SERVICES[@]}"
+        elif [[ ${#ALL_PORTS[@]} -eq 0 ]]; then
+            echo "No services configured. Add one with: aibox service-add <name> <port>"
+            exit 1
+        else
+            set -- "${ALL_PORTS[@]}"
+        fi
     fi
 else
     # --no-service: only use command line port args
+    set -- "${CLI_PORTS[@]}"
     if [[ $# -eq 0 ]]; then
         echo "Connecting without services (--no-service)"
     fi
 fi
 
 # Start VM if it's not running
-VM_STATE=$(virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null)
-if [ "$VM_STATE" != "running" ]; then
+if ! vm_exists "$VM_NAME"; then
+    print_error "VM '$VM_NAME' does not exist."
+    echo "Run 'aibox setup' to create it." >&2
+    exit 1
+fi
+
+VM_STATE=$(vm_state "$VM_NAME")
+if [[ "$VM_STATE" != "running" ]]; then
     echo "Starting $VM_NAME..."
-    virsh -c "$LIBVIRT_DEFAULT_URI" start "$VM_NAME"
+    vm_start "$VM_NAME"
+fi
+
+# Make sure the tunnel service is up for the configured services.
+if [[ "$NO_SERVICE" == "false" && "$TUNNEL_INSTALLED" == "true" ]]; then
+    "$CMD_DIR/tunnel" ensure >/dev/null 2>&1 || true
 fi
 
 # Dynamic IP Detection
 echo -n "Detecting Guest IP..."
 for i in {1..20}; do
-    GUEST_IP=$(virsh -c "$LIBVIRT_DEFAULT_URI" domifaddr "$VM_NAME" --source lease | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)
+    GUEST_IP=$(vm_ip "$VM_NAME")
     if [ -n "$GUEST_IP" ]; then
         break
     fi
@@ -393,6 +464,12 @@ if [ -z "$GUEST_IP" ]; then
 fi
 echo -e "\nFound IP: $GUEST_IP"
 
+# Ad-hoc forwards bind to localhost unless --lan is given.
+BIND_ADDR="127.0.0.1"
+if [[ "$LAN_EXPOSE" == "true" ]]; then
+    BIND_ADDR="0.0.0.0"
+fi
+
 # Build the Forwarding String (only if ports are specified)
 FORWARD_ARGS=""
 if [[ $# -gt 0 ]]; then
@@ -405,7 +482,7 @@ if [[ $# -gt 0 ]]; then
             GUEST_PORT="$ARG"
         fi
 
-        FORWARD_ARGS="$FORWARD_ARGS -L 0.0.0.0:$HOST_PORT:127.0.0.1:$GUEST_PORT"
+        FORWARD_ARGS="$FORWARD_ARGS -L $BIND_ADDR:$HOST_PORT:127.0.0.1:$GUEST_PORT"
     done
 fi
 
@@ -423,22 +500,36 @@ echo -e "\nSSH is ready!"
 
 # Connect
 if [[ -n "$FORWARD_ARGS" ]]; then
-    echo "Connecting to $GUEST_USER@$GUEST_IP with port(s): $@"
+    echo "Connecting to $GUEST_USER@$GUEST_IP with port(s): $*"
 else
     echo "Connecting to $GUEST_USER@$GUEST_IP (no port forwarding)"
 fi
 
 # Open browser if -w flag is set
 if [[ "$OPEN_WEB" == "true" ]]; then
-    HOST_PORT="${1%%:*}"
-    HOSTNAME_LOCAL=$(hostname).local
-    BROWSER_URL="http://${HOSTNAME_LOCAL}:${HOST_PORT}"
+    if [[ $# -gt 0 ]]; then
+        HOST_PORT="${1%%:*}"
+    else
+        HOST_PORT=$(jq -r 'to_entries[0].value' "$SERVICES_FILE" 2>/dev/null || echo "")
+        HOST_PORT="${HOST_PORT%%:*}"
+    fi
 
-    echo "Opening browser to $BROWSER_URL..."
-    if command -v xdg-open &>/dev/null; then
-        xdg-open "$BROWSER_URL" &
-    elif command -v open &>/dev/null; then
-        open "$BROWSER_URL" &
+    if [[ -z "$HOST_PORT" ]]; then
+        print_error "No service port to open."
+    else
+        if [[ "$LAN_EXPOSE" == "true" ]]; then
+            URL_HOST=$(hostname).local
+        else
+            URL_HOST="localhost"
+        fi
+        BROWSER_URL="http://${URL_HOST}:${HOST_PORT}"
+
+        echo "Opening browser to $BROWSER_URL..."
+        if command -v xdg-open &>/dev/null; then
+            xdg-open "$BROWSER_URL" &
+        elif command -v open &>/dev/null; then
+            open "$BROWSER_URL" &
+        fi
     fi
 fi
 

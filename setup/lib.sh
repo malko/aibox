@@ -24,6 +24,7 @@ SETUP_STEP_ORDER=(
     update-check
     virtiofs
     cli
+    tunnel
 )
 
 # Prerequisites per step: running a step first runs its dependencies (recursively).
@@ -44,6 +45,7 @@ declare -A SETUP_STEP_DEPS=(
     [update-check]="scripts"
     [virtiofs]="vm"
     [cli]=""
+    [tunnel]="cli"
 )
 
 # Human description of each step, used in help output.
@@ -64,6 +66,7 @@ declare -A SETUP_STEP_DESC=(
     [update-check]="Install the automatic update check"
     [virtiofs]="Configure the virtiofs git share with the host"
     [cli]="Install the 'aibox' command and shell completion on the host"
+    [tunnel]="Install the tunnel user service on the host"
 )
 
 # Tracks steps already run in this invocation, so prerequisites run once.

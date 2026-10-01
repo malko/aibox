@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVICES_FILE="${HOME}/.config/aibox/services.json"
 
 if [[ $# -lt 2 ]]; then
@@ -36,3 +37,8 @@ else
 fi
 
 echo "Added service '$SERVICE_NAME' on port $PORT_VALUE"
+
+# Pick up the new port in a running tunnel.
+if [[ -x "$SCRIPT_DIR/cmd/tunnel" ]]; then
+    "$SCRIPT_DIR/cmd/tunnel" reload >/dev/null 2>&1 || true
+fi

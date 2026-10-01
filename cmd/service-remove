@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVICES_FILE="${HOME}/.config/aibox/services.json"
 
 if [[ $# -lt 1 ]]; then
@@ -25,3 +26,8 @@ TEMP=$(mktemp)
 jq --arg name "$SERVICE_NAME" 'del(.[$name])' "$SERVICES_FILE" > "$TEMP" && mv "$TEMP" "$SERVICES_FILE"
 
 echo "Removed service '$SERVICE_NAME'"
+
+# Drop the port from a running tunnel.
+if [[ -x "$SCRIPT_DIR/cmd/tunnel" ]]; then
+    "$SCRIPT_DIR/cmd/tunnel" reload >/dev/null 2>&1 || true
+fi

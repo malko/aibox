@@ -1,0 +1,35 @@
+#!/bin/bash
+set -e
+
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_SOURCE" ]]; do
+    SOURCE_LINK="$(readlink "$SCRIPT_SOURCE")"
+    if [[ "$SOURCE_LINK" == /* ]]; then
+        SCRIPT_SOURCE="$SOURCE_LINK"
+    else
+        SCRIPT_SOURCE="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)/$SOURCE_LINK"
+    fi
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
+CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
+source "$SCRIPT_DIR/shared-funcs.sh"
+source "$SCRIPT_DIR/config-funcs.sh"
+init_config_file
+source "$SCRIPT_DIR/host/service.sh"
+
+VM_NAME=$(get_config "VM_NAME" "aibox")
+
+print_info "Starting VM '$VM_NAME'..."
+"$SCRIPT_DIR/host/start-vm.sh" "$VM_NAME"
+
+if svc_require >/dev/null 2>&1 && svc_installed; then
+    if ! svc_is_active; then
+        print_info "Starting the tunnel service..."
+        svc_start || true
+    fi
+else
+    print_info "Tunnel service not installed (run 'aibox tunnel install')."
+fi
+
+echo ""
+exec "$SCRIPT_DIR/cmd/status"
