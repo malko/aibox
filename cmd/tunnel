@@ -268,7 +268,9 @@ case "$ACTION" in
             if svc_installed; then
                 echo "  Service:  $(svc_status_text)"
                 if [[ "$(vm_state "$VM_NAME")" == "running" ]] && ! svc_is_active; then
-                    echo "  Hint:     'aibox tunnel logs' shows why it is not running."
+                    echo "  Last logs:"
+                    svc_logs 2>/dev/null | tail -3 | sed 's/^/    /' || true
+                    echo "  Hint:     full logs: 'aibox tunnel logs'"
                 fi
             else
                 echo "  Service:  not installed (run: aibox tunnel install)"

@@ -32,6 +32,14 @@ fi
 
 SERVICES_FILE="${HOME}/.config/aibox/services.json"
 
+# A user service does not always inherit the shell PATH: fail loudly instead
+# of reporting "no services" and exiting cleanly (which leaves the tunnel
+# silently inactive).
+if ! command -v jq &>/dev/null; then
+    echo "jq not found in PATH ($PATH): cannot read $SERVICES_FILE." >&2
+    exit 1
+fi
+
 PORTS=()
 if [[ -f "$SERVICES_FILE" ]]; then
     while IFS= read -r port; do

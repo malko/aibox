@@ -24,6 +24,7 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
+Environment="PATH=$PATH"
 ExecStart=$SCRIPT_DIR/host/tunnel.sh
 Restart=on-failure
 RestartSec=3
