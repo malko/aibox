@@ -61,6 +61,9 @@ It can be forced with `VM_BACKEND` in `~/.config/aibox/aibox.conf`.
 - The VM is an Ubuntu cloud image managed by Lima: no manual OS install.
 - Host `~/git` is mounted writable at `~/git` in the VM (Lima mounts replace virtiofs).
 - SSH keys are managed by Lima; the `ssh` setup step is a no-op.
+- The tunnel runs as a per-user LaunchAgent (`aibox tunnel install`).
+- Lima's automatic port forwarding is disabled, so services are only reachable
+  through the aibox tunnel.
 - Snapshots are not supported on macOS (Lima has no stable snapshot support yet).
 
 ## Network Model
