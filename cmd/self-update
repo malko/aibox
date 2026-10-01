@@ -3,20 +3,25 @@ set -e
 
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
-    SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"
+    SOURCE_LINK="$(readlink "$SCRIPT_SOURCE")"
+    if [[ "$SOURCE_LINK" == /* ]]; then
+        SCRIPT_SOURCE="$SOURCE_LINK"
+    else
+        SCRIPT_SOURCE="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)/$SOURCE_LINK"
+    fi
 done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
 CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
+source "$SCRIPT_DIR/shared-funcs.sh"
 source "$SCRIPT_DIR/config-funcs.sh"
 init_config_file
+source "$SCRIPT_DIR/host/backend.sh"
 
 if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
 fi
 
 VM_NAME=${1:-$(get_config "VM_NAME" "aibox")}
-GUEST_USER=${2:-$(get_config "GUEST_USER" "aibox")}
-LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 
 if ! git -C "$SCRIPT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
     echo "Error: $SCRIPT_DIR is not a git checkout."
@@ -57,13 +62,11 @@ if [[ -z "$SCRIPTS_CHANGED" ]]; then
     exit 0
 fi
 
-GUEST_IP=$(virsh -c "$LIBVIRT_DEFAULT_URI" domifaddr "$VM_NAME" --source lease 2>/dev/null | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)
-
-if [[ -z "$GUEST_IP" ]]; then
+if ! vm_exists "$VM_NAME" || [[ "$(vm_state "$VM_NAME")" != "running" ]]; then
     echo "Scripts changed, but VM '$VM_NAME' is not running: run 'aibox update scripts' later."
     exit 0
 fi
 
 echo "Scripts changed, uploading to the VM..."
-"$SCRIPT_DIR/host/upload-scripts.sh" "$VM_NAME" "$GUEST_IP" "$GUEST_USER"
+"$SCRIPT_DIR/host/upload-scripts.sh" "$VM_NAME"
 echo "Self-update completed."

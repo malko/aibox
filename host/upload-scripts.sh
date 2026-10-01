@@ -1,42 +1,46 @@
 #!/bin/bash
 set -e
 
+CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
 source "$(dirname "$0")/../shared-funcs.sh"
+source "$(dirname "$0")/../config-funcs.sh"
+init_config_file
+source "$SCRIPT_DIR/host/backend.sh"
 
-VM_NAME="${1:-}"
+VM_NAME="${1:-$(get_config "VM_NAME" "aibox")}"
 
-load_vm_info "$VM_NAME"
-
-GUEST_IP="${2:-$GUEST_IP}"
-GUEST_USER="${3:-$GUEST_USER}"
-
-if [[ -z "$GUEST_IP" ]]; then
-    GUEST_IP=$(prompt "Guest IP address" "")
+if [[ "$VM_BACKEND" == "lima" ]]; then
+    GUEST_USER="$(vm_default_guest_user)"
+else
+    GUEST_USER=$(get_config "GUEST_USER" "aibox")
 fi
 
-if [[ -z "$GUEST_USER" ]]; then
-    GUEST_USER=$(prompt "VM username" "aibox")
+if [[ "$(vm_state "$VM_NAME")" != "running" ]]; then
+    print_error "VM '$VM_NAME' is not running."
+    exit 1
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+vm_resolve "$VM_NAME"
 
 print_info "=== Upload Scripts to VM ==="
 
-scp -o ConnectTimeout=10 \
-    "$SCRIPT_DIR/shared-funcs.sh" \
-    "$SCRIPT_DIR/guest/install-deps.sh" \
-    "$SCRIPT_DIR/guest/install-docker.sh" \
-    "$SCRIPT_DIR/guest/install-service.sh" \
-    "$SCRIPT_DIR/guest/install-dsh.sh" \
-    "$SCRIPT_DIR/guest/install-dsh-service.sh" \
-    "$SCRIPT_DIR/guest/update-check.sh" \
-    "$SCRIPT_DIR/guest/install-update-check.sh" \
-    "$SCRIPT_DIR/guest/install-vscode.sh" \
-    "$SCRIPT_DIR/guest/configure-motd.sh" \
-    "$SCRIPT_DIR/guest/configure-sshd.sh" \
-    "$SCRIPT_DIR/guest/update-target.sh" \
-    "$GUEST_USER@${GUEST_IP}:~/scripts/"
+SCRIPT_FILES=(
+    "$SCRIPT_DIR/shared-funcs.sh"
+    "$SCRIPT_DIR/guest/install-deps.sh"
+    "$SCRIPT_DIR/guest/install-docker.sh"
+    "$SCRIPT_DIR/guest/install-service.sh"
+    "$SCRIPT_DIR/guest/install-dsh.sh"
+    "$SCRIPT_DIR/guest/install-dsh-service.sh"
+    "$SCRIPT_DIR/guest/update-check.sh"
+    "$SCRIPT_DIR/guest/install-update-check.sh"
+    "$SCRIPT_DIR/guest/install-vscode.sh"
+    "$SCRIPT_DIR/guest/configure-motd.sh"
+    "$SCRIPT_DIR/guest/configure-sshd.sh"
+    "$SCRIPT_DIR/guest/update-target.sh"
+)
 
-ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "chmod +x ~/scripts/*.sh"
+vm_ssh -- "mkdir -p ~/scripts"
+vm_scp "${SCRIPT_FILES[@]}" "$VM_SSH_TARGET:~/scripts/"
+vm_ssh -- "chmod +x ~/scripts/*.sh"
 
 print_success "Scripts uploaded to VM!"

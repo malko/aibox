@@ -12,5 +12,5 @@ step_update-check() {
     fi
 
     print_info "Installing update check service..."
-    ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/install-update-check.sh"
+    vm_ssh -t -t -o ConnectTimeout=10 -- "~/scripts/install-update-check.sh"
 }

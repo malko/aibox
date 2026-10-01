@@ -5,13 +5,17 @@ This repository contains bash scripts for managing an AI development VM with KVM
 ## Project Overview
 
 - **Type**: Bash scripts collection (no build system, no tests)
+- **Platforms**: Linux (libvirt/QEMU) and macOS (Lima)
 - **Main Scripts**:
   - `aibox` - Main CLI for VM management and port forwarding
   - `setup.sh` - Setup runner (also `aibox setup`)
+  - `bootstrap-macos.sh` - macOS one-shot installer (Homebrew + Lima + setup)
   - `setup/lib.sh` - Step registry and prerequisite resolution
   - `setup/steps/*.sh` - One self-contained step per file
   - `host/tunnel.sh` - Tunnel service entry point (ssh -N, one -L per service)
-  - `host/service.sh` + `host/services/` - User service manager (systemd --user)
+  - `host/service.sh` + `host/services/` - User service manager (systemd/launchd)
+  - `host/backend.sh` - VM backend selection + SSH helpers
+  - `host/backends/{libvirt,lima}.sh` - Backend implementations
   - `cmd/` - Service and VM management commands
 
 ## Commands
@@ -240,6 +244,19 @@ trap "rm -rf $TEMP_DIR" EXIT
 - Use POSIX-compatible constructs for maximum portability
 - Test on multiple shells if portability matters
 
+### macOS / bash 3.2 compatibility
+
+macOS ships bash 3.2 and BSD userland, so the host scripts must stay
+compatible with both Linux and macOS:
+
+- No associative arrays (`declare -A`), no `${var,,}` / `${var^^}`
+- Use `readlink` (not `readlink -f`), the portable symlink loop, or
+  `resolve_symlinks` from `shared-funcs.sh`
+- Use `port_open` from `shared-funcs.sh` instead of calling `nc` directly
+- Never use `sed -i`; rewrite through a temp file + `mv` (see `save_config`)
+- `vm_ssh` / `vm_scp` / `vm_*` helpers from `host/backend.sh` abstract the
+  VM backend; do not call `virsh` or `limactl` outside `host/backends/`
+
 ## File Naming
 
 - Use lowercase with hyphens: `script-name.sh`
@@ -277,10 +294,11 @@ shellcheck script.sh
 
 ## Common Dependencies
 
-- `virsh` - for KVM/QEMU VM management
+- `virsh` / `virt-install` - for KVM/QEMU VM management (Linux)
+- `limactl` (Lima) - for VM management on macOS
 - `jq` - for JSON parsing
 - `curl` - for HTTP requests
-- `nc` (netcat) - for network checks
+- `nc` (netcat) - for network checks (use the `port_open` helper)
 - `systemctl` - for systemd user services
 - `loginctl` - for linger management
 - `shellcheck` - for bash linting (installed in the VM by `guest/install-deps.sh`)

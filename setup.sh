@@ -18,7 +18,7 @@ usage() {
     echo "Steps:"
     local step
     for step in "${SETUP_STEP_ORDER[@]}"; do
-        printf '  %-14s %s\n' "$step" "${SETUP_STEP_DESC[$step]}"
+        printf '  %-14s %s\n' "$step" "$(setup_step_desc "$step")"
     done
     printf '  %-14s %s\n' "all" "Run every step in order"
     echo ""
@@ -67,12 +67,16 @@ fi
 
 init_config_file
 
-check_requirements virsh jq
+# The backend must be loaded after the config so VM_BACKEND can be read.
+source "$SCRIPT_DIR/host/backend.sh"
+
+vm_backend_require
 
 print_ascii_logo
 
-HOSTNAME_LOCAL=$(hostname).local
+HOSTNAME_LOCAL=$(host_local_name)
 print_info "=== AIBox Setup ==="
+print_info "VM backend: $VM_BACKEND"
 print_info "Host detected: $HOSTNAME_LOCAL"
 print_info "Config file: $CONFIG_FILE"
 echo ""

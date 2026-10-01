@@ -15,10 +15,10 @@ step_dsh() {
     save_config "DSH_PORT" "$DSH_PORT"
 
     print_info "Installing dsh..."
-    ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/install-dsh.sh"
+    vm_ssh -t -t -o ConnectTimeout=10 -- "~/scripts/install-dsh.sh"
 
     print_info "Installing dsh-web service..."
-    ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "source ~/.bashrc && ~/scripts/install-dsh-service.sh $DSH_PORT"
+    vm_ssh -t -t -o ConnectTimeout=10 -- "source ~/.bashrc && ~/scripts/install-dsh-service.sh $DSH_PORT"
 
     SERVICES_FILE="${HOME}/.config/aibox/services.json"
     if [[ ! -f "$SERVICES_FILE" ]]; then

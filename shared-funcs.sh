@@ -140,4 +140,33 @@ host_local_name() {
     printf '%s\n' "$name"
 }
 
+# Check whether a TCP port is open. BSD netcat (macOS) uses -G for the
+# connection timeout while GNU netcat uses -w; both support -z (scan only).
+port_open() {
+    local host="$1"
+    local port="$2"
+    if is_macos; then
+        nc -z -G 1 "$host" "$port" &>/dev/null
+    else
+        nc -z -w 1 "$host" "$port" &>/dev/null
+    fi
+}
+
+# Resolve a path through symlinks without `readlink -f` (GNU-only, absent on
+# BSD). Prints an absolute path to the final target.
+resolve_symlinks() {
+    local source="$1"
+    local link dir
+    while [[ -L "$source" ]]; do
+        link="$(readlink "$source")"
+        if [[ "$link" == /* ]]; then
+            source="$link"
+        else
+            dir="$(cd "$(dirname "$source")" && pwd)"
+            source="$dir/$link"
+        fi
+    done
+    printf '%s\n' "$source"
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

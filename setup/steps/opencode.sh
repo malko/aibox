@@ -17,8 +17,8 @@ step_opencode() {
     fi
 
     print_info "Configuring OpenCode..."
-    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" 'mkdir -p ~/.config/opencode; if [ ! -f ~/.config/opencode/opencode.json ]; then echo "{ \"provider\": {} }" > ~/.config/opencode/opencode.json; fi'
+    vm_ssh -o ConnectTimeout=10 -- 'mkdir -p ~/.config/opencode; if [ ! -f ~/.config/opencode/opencode.json ]; then echo "{ \"provider\": {} }" > ~/.config/opencode/opencode.json; fi'
 
     print_info "Installing opencode-web service..."
-    ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "source ~/.bashrc && ~/scripts/install-service.sh"
+    vm_ssh -t -t -o ConnectTimeout=10 -- "source ~/.bashrc && ~/scripts/install-service.sh"
 }
