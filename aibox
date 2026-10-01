@@ -396,6 +396,11 @@ if "$CMD_DIR/tunnel" installed >/dev/null 2>&1; then
     TUNNEL_INSTALLED=true
 fi
 
+if [[ "$TUNNEL_INSTALLED" == "false" && "$NO_SERVICE" == "false" && -f "$SERVICES_FILE" ]]; then
+    print_info "Tunnel service not installed: forwarding services in this session only."
+    print_info "Install it once with 'aibox tunnel install' (or 'aibox setup tunnel')."
+fi
+
 if [[ "$NO_SERVICE" == "false" ]]; then
     if [[ "$TUNNEL_INSTALLED" == "true" ]]; then
         set -- "${CLI_PORTS[@]}"
