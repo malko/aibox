@@ -15,7 +15,7 @@ CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
 source "$SCRIPT_DIR/shared-funcs.sh"
 source "$SCRIPT_DIR/config-funcs.sh"
 init_config_file
-source "$SCRIPT_DIR/host/vm.sh"
+source "$SCRIPT_DIR/host/backend.sh"
 
 VM_NAME=$(get_config "VM_NAME" "aibox")
 
