@@ -28,3 +28,13 @@ mounts:
   - location: "~/git"
     mountPoint: "{{.Home}}/git"
     writable: true
+
+# Disable Lima's automatic dynamic port forwarding: the guest services are
+# exposed only through the aibox tunnel service, so nothing is reachable
+# while the service is stopped. This rule matches every guest port and
+# short-circuits Lima's built-in fallback rule.
+portForwards:
+  - guestIP: "0.0.0.0"
+    guestPortRange: [1, 65535]
+    proto: "any"
+    ignore: true

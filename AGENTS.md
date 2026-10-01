@@ -300,5 +300,6 @@ shellcheck script.sh
 - `curl` - for HTTP requests
 - `nc` (netcat) - for network checks (use the `port_open` helper)
 - `systemctl` - for systemd user services
+- `launchctl` - for launchd user services (macOS)
 - `loginctl` - for linger management
 - `shellcheck` - for bash linting (installed in the VM by `guest/install-deps.sh`)
