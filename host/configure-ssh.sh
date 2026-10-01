@@ -1,7 +1,16 @@
 #!/bin/bash
 set -e
 
+CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
 source "$(dirname "$0")/../shared-funcs.sh"
+source "$(dirname "$0")/../config-funcs.sh"
+init_config_file
+source "$SCRIPT_DIR/host/backend.sh"
+
+if [[ "$VM_BACKEND" == "lima" ]]; then
+    print_info "SSH keys are managed automatically by Lima, nothing to do."
+    exit 0
+fi
 
 check_command ssh
 check_command ssh-copy-id

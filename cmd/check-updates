@@ -3,20 +3,25 @@ set -e
 
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
-    SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"
+    SOURCE_LINK="$(readlink "$SCRIPT_SOURCE")"
+    if [[ "$SOURCE_LINK" == /* ]]; then
+        SCRIPT_SOURCE="$SOURCE_LINK"
+    else
+        SCRIPT_SOURCE="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)/$SOURCE_LINK"
+    fi
 done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
 CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
+source "$SCRIPT_DIR/shared-funcs.sh"
 source "$SCRIPT_DIR/config-funcs.sh"
 init_config_file
+source "$SCRIPT_DIR/host/backend.sh"
 
 if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
 fi
 
 VM_NAME=${1:-$(get_config "VM_NAME" "aibox")}
-GUEST_USER=${2:-$(get_config "GUEST_USER" "aibox")}
-LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 
 # aibox itself lives on the host: check for new commits on the tracked upstream.
 echo "=== aibox repository ==="
@@ -37,22 +42,22 @@ else
     echo "  not a git checkout"
 fi
 
-GUEST_IP=$(virsh -c "$LIBVIRT_DEFAULT_URI" domifaddr "$VM_NAME" --source lease 2>/dev/null | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)
-
-if [[ -z "$GUEST_IP" ]]; then
-    echo "Error: Could not detect VM IP. Is the VM running?"
+if ! vm_exists "$VM_NAME" || [[ "$(vm_state "$VM_NAME")" != "running" ]]; then
+    echo "Error: VM '$VM_NAME' is not running."
     exit 1
 fi
+
+vm_resolve "$VM_NAME"
 
 echo ""
 echo "=== VM updates ==="
 
 # The check script ships with the repo: push it if the VM does not have it yet.
-if ! ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "test -f ~/scripts/update-check.sh" 2>/dev/null; then
+if ! vm_ssh -o ConnectTimeout=10 -- "test -f ~/scripts/update-check.sh" 2>/dev/null; then
     echo "Uploading update-check.sh to the VM..."
-    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "mkdir -p ~/scripts"
-    scp -o ConnectTimeout=10 "$SCRIPT_DIR/guest/update-check.sh" "$GUEST_USER@$GUEST_IP:~/scripts/"
-    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "chmod +x ~/scripts/update-check.sh"
+    vm_ssh -o ConnectTimeout=10 -- "mkdir -p ~/scripts"
+    vm_scp "$SCRIPT_DIR/guest/update-check.sh" "$VM_SSH_TARGET:~/scripts/"
+    vm_ssh -o ConnectTimeout=10 -- "chmod +x ~/scripts/update-check.sh"
 fi
 
-ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/update-check.sh --print"
+vm_ssh -o ConnectTimeout=10 -- "~/scripts/update-check.sh --print"

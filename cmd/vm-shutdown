@@ -2,38 +2,46 @@
 set -e
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
-    SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"
+    SOURCE_LINK="$(readlink "$SCRIPT_SOURCE")"
+    if [[ "$SOURCE_LINK" == /* ]]; then
+        SCRIPT_SOURCE="$SOURCE_LINK"
+    else
+        SCRIPT_SOURCE="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)/$SOURCE_LINK"
+    fi
 done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
 CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
+source "$SCRIPT_DIR/shared-funcs.sh"
 source "$SCRIPT_DIR/config-funcs.sh"
 init_config_file
+source "$SCRIPT_DIR/host/backend.sh"
 
 VM_NAME="${1:-aibox}"
 FORCE="${2:-}"
-LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 
 if [[ "$FORCE" == "-f" || "$FORCE" == "--force" ]]; then
     echo "Force shutting down VM '$VM_NAME'..."
-    virsh -c "$LIBVIRT_DEFAULT_URI" destroy "$VM_NAME"
-else
-    echo "Trimming filesystem inside '$VM_NAME' to reclaim space..."
-    # we use '|| true' to avoid 'set -e' to kill the script if agent doesn't respond
-    virsh -c "$LIBVIRT_DEFAULT_URI" qemu-agent-command "$VM_NAME" '{"execute":"guest-fstrim"}' >/dev/null 2>&1 || echo "Warning: QEMU guest agent not responding, skipping TRIM."
-   
-    echo "Gracefully shutting down VM '$VM_NAME'..."
-    virsh -c "$LIBVIRT_DEFAULT_URI" shutdown "$VM_NAME"
-
-    echo "Waiting for VM to shutdown..."
-    for i in {1..30}; do
-        STATE=$(LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null || echo "unknown")
-        if [[ "$STATE" == "shut off" ]]; then
-            echo "VM '$VM_NAME' is now shut off."
-            exit 0
-        fi
-        sleep 1
-    done
-
-    echo "VM did not shutdown in time. Use '$0 $VM_NAME -f' to force shutdown."
-    exit 1
+    vm_destroy "$VM_NAME"
+    exit 0
 fi
+
+echo "Trimming filesystem inside '$VM_NAME' to reclaim space..."
+# Best effort: the guest agent (libvirt) may not respond, or the backend may
+# have no TRIM hook at all.
+vm_fstrim "$VM_NAME" || echo "Warning: guest TRIM unavailable, skipping."
+
+echo "Gracefully shutting down VM '$VM_NAME'..."
+vm_shutdown "$VM_NAME"
+
+echo "Waiting for VM to shutdown..."
+for i in {1..30}; do
+    STATE=$(vm_state "$VM_NAME")
+    if [[ "$STATE" == "shut off" ]]; then
+        echo "VM '$VM_NAME' is now shut off."
+        exit 0
+    fi
+    sleep 1
+done
+
+echo "VM did not shutdown in time. Use 'aibox shutdown -f' to force shutdown."
+exit 1

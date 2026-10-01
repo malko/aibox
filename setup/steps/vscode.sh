@@ -11,5 +11,5 @@ step_vscode() {
         return 0
     fi
 
-    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/install-vscode.sh"
+    vm_ssh -t -o ConnectTimeout=10 -- "~/scripts/install-vscode.sh"
 }

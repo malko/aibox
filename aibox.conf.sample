@@ -11,6 +11,9 @@
 VM_NAME="aibox"
 GUEST_USER="aibox"
 
+# VM backend: "auto" (libvirt on Linux, Lima on macOS), "libvirt" or "lima"
+# VM_BACKEND="auto"
+
 # Create VM if it doesn't exist
 CREATE_VM="yes"
 

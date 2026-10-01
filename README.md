@@ -4,6 +4,8 @@ Scripts for managing an AI development virtual machine with reverse proxy and se
 
 ## Quick Start
 
+### Linux (libvirt)
+
 ```bash
 # Run automated setup
 ./setup.sh
@@ -14,9 +16,22 @@ Scripts for managing an AI development virtual machine with reverse proxy and se
 # Access opencode-web at http://localhost:4096
 ```
 
+### macOS (Lima)
+
+```bash
+# One command: installs Homebrew/Lima if needed, creates the VM and sets it up
+./bootstrap-macos.sh
+
+# Connect to VM (automatically forwards configured services)
+./aibox
+
+# Access opencode-web at http://localhost:4096
+```
+
 ## Requirements
 
-### Host Machine
+### Host Machine (Linux)
+
 - KVM/QEMU with libvirt
 - virsh, libvirt-client installed
 
@@ -24,9 +39,29 @@ Scripts for managing an AI development virtual machine with reverse proxy and se
 sudo apt install virsh libvirt-client
 ```
 
+### Host Machine (macOS)
+
+- macOS 13.5 or newer (Apple Silicon or Intel)
+- [Lima](https://lima-vm.io/) and `jq` (installed automatically by `bootstrap-macos.sh`)
+
+```bash
+brew install lima jq
+```
+
 ### Guest VM
+
 - Ubuntu/Debian VM with SSH access
 - At least 4GB RAM, 4+ cores recommended
+
+The backend is selected automatically: libvirt under Linux, Lima under macOS.
+It can be forced with `VM_BACKEND` in `~/.config/aibox/aibox.conf`.
+
+### Platform differences on macOS
+
+- The VM is an Ubuntu cloud image managed by Lima: no manual OS install.
+- Host `~/git` is mounted writable at `~/git` in the VM (Lima mounts replace virtiofs).
+- SSH keys are managed by Lima; the `ssh` setup step is a no-op.
+- Snapshots are not supported on macOS (Lima has no stable snapshot support yet).
 
 ## Network Model
 
@@ -219,7 +254,10 @@ Main config is at `~/.config/aibox/aibox.conf`:
 ```
 VM_NAME="ai-agentbox"
 GUEST_USER="aibox"
+VM_BACKEND="auto"
 ```
+
+`VM_BACKEND` accepts `auto` (default), `libvirt` or `lima`.
 
 Tunnel settings:
 
@@ -239,6 +277,7 @@ Edit `~/.config/opencode/opencode.json` in the VM to configure AI providers.
 aibox/
 ├── aibox                        # Main CLI (VM + port forwarding + commands)
 ├── setup.sh                     # Setup runner (steps, with prerequisites)
+├── bootstrap-macos.sh           # macOS one-shot installer (Homebrew + Lima + setup)
 ├── setup/                       # Modular setup
 │   ├── lib.sh                   # Step registry, prerequisites, runner
 │   └── steps/                   # One script per step (vm, ssh, motd, dsh, ...)
@@ -254,15 +293,20 @@ aibox/
 │   ├── self-update              # Pull the repo and push scripts to the VM
 │   ├── vm-shutdown              # Shutdown VM
 │   ├── vm-restart               # Restart VM
-│   └── vm-snapshot              # Manage snapshots
+│   └── vm-snapshot              # Manage snapshots (libvirt only)
 ├── host/                        # Host-side scripts
 │   ├── tunnel.sh                # Tunnel service entry point (ssh -N -L)
 │   ├── service.sh               # Service manager selection
 │   ├── services/                # systemd --user / launchd implementations
-│   ├── vm.sh                    # VM helpers (libvirt)
-│   ├── create-vm.sh             # Create VM
+│   ├── backend.sh               # VM backend selection + SSH helpers
+│   ├── backends/
+│   │   ├── libvirt.sh           # libvirt/QEMU backend (Linux)
+│   │   └── lima.sh              # Lima backend (macOS)
+│   ├── lima/aibox.yaml          # Lima instance template (macOS)
+│   ├── create-vm.sh             # Create VM (libvirt)
+│   ├── create-vm-lima.sh        # Create VM (Lima)
 │   ├── start-vm.sh              # Start VM
-│   ├── configure-ssh.sh         # SSH setup
+│   ├── configure-ssh.sh         # SSH setup (libvirt)
 │   └── upload-scripts.sh        # Upload to VM
 ├── guest/                       # Guest-side scripts (uploaded to VM)
 │   ├── install-deps.sh          # Install dependencies
