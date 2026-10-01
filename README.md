@@ -28,6 +28,30 @@ sudo apt install virsh libvirt-client
 - Ubuntu/Debian VM with SSH access
 - At least 4GB RAM, 4+ cores recommended
 
+## Network Model
+
+The VM is deliberately not reachable from your network: guest services listen
+on the guest's localhost, and nothing is exposed until you run `aibox`.
+
+`aibox` opens an SSH session to the VM and creates one local tunnel per
+service/port:
+
+- services from `~/.config/aibox/services.json` are forwarded automatically;
+- extra `[host:]guest` ports can be passed on the command line;
+- each tunnel is `-L 0.0.0.0:<host_port>:127.0.0.1:<guest_port>`, so a service
+  is reachable at `http://localhost:<host_port>` while the session runs;
+- `-n/--no-service` connects without forwarding the configured services;
+- `-p/--peon-relay` additionally opens a reverse tunnel (guest to host,
+  port 19998).
+
+Because the ports are bound on `0.0.0.0`, the forwarded services are also
+reachable from the LAN via `http://<hostname>.local:<host_port>` — but only
+while `aibox` is running. Closing the SSH session (Ctrl-D, network drop, laptop
+sleep) tears all the tunnels down and the services become unreachable again.
+
+In short: no `aibox` session, no exposed service. This is why the opencode web
+interface is at `http://localhost:4096` rather than on the VM's IP.
+
 ## Usage
 
 ### Connect to VM
