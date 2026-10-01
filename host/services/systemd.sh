@@ -32,7 +32,8 @@ RestartSec=3
 WantedBy=default.target
 EOF
     systemctl --user daemon-reload
-    systemctl --user enable "$SVC_UNIT_NAME" >/dev/null 2>&1 || true
+    # Not enabled: the service is started on demand by the aibox CLI
+    # (aibox start/connect), so nothing runs while the VM is off.
 }
 
 svc_uninstall() {
@@ -59,10 +60,9 @@ svc_status_text() {
         printf '%s\n' "not installed"
         return 0
     fi
-    local state enabled
+    local state
     state=$(systemctl --user is-active "$SVC_UNIT_NAME" 2>/dev/null || true)
-    enabled=$(systemctl --user is-enabled "$SVC_UNIT_NAME" 2>/dev/null || true)
-    printf '%s (%s)\n' "${state:-unknown}" "${enabled:-unknown}"
+    printf '%s\n' "${state:-unknown}"
 }
 
 svc_apply_if_active() {

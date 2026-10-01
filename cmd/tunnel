@@ -167,8 +167,12 @@ case "$ACTION" in
         svc_or_die
         svc_install
         print_success "Installed $SVC_UNIT_NAME"
-        echo "The service starts at login and stays inert while the VM is off."
-        echo "Start it now with: aibox tunnel start"
+        if [[ "$(vm_state "$VM_NAME")" == "running" ]]; then
+            svc_start || true
+            print_info "Tunnel service started (the VM is running)."
+        else
+            echo "The service is not started at login; run 'aibox start' when you need it."
+        fi
         ;;
 
     uninstall)

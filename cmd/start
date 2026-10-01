@@ -22,12 +22,8 @@ VM_NAME=$(get_config "VM_NAME" "aibox")
 print_info "Starting VM '$VM_NAME'..."
 "$SCRIPT_DIR/host/start-vm.sh" "$VM_NAME"
 
-if svc_require >/dev/null 2>&1 && svc_installed; then
-    if ! svc_is_active; then
-        print_info "Starting the tunnel service..."
-        svc_start || true
-    fi
-else
+# host/start-vm.sh already ensures the tunnel service when it is installed.
+if ! (svc_require >/dev/null 2>&1 && svc_installed); then
     print_info "Tunnel service not installed (run 'aibox tunnel install')."
 fi
 

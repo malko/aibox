@@ -2,8 +2,9 @@
 # Maintains the SSH tunnel that exposes the configured VM services on the host.
 #
 # Started by the aibox-tunnel user service. It waits (bounded by TUNNEL_WAIT)
-# for the VM, then execs a single `ssh -N` with one -L per configured service.
-# A non-zero exit makes the service manager restart it (Restart=on-failure); a
+# for the VM, which is always started by the CLI (aibox start/connect/restart),
+# never by this service. It then execs a single `ssh -N` with one -L per
+# configured service. A non-zero exit makes the service manager restart it; a
 # clean exit (VM still off after the wait) leaves the service inactive, so an
 # idle VM costs nothing.
 
@@ -18,7 +19,6 @@ source "$SCRIPT_DIR/host/vm.sh"
 VM_NAME=$(get_config "VM_NAME" "aibox")
 GUEST_USER=$(get_config "GUEST_USER" "aibox")
 TUNNEL_BIND=$(get_config "TUNNEL_BIND" "local")
-TUNNEL_START_VM=$(get_config "TUNNEL_START_VM" "no")
 TUNNEL_WAIT=$(get_config "TUNNEL_WAIT" "120")
 
 # Enforce the LAN timeout even when the service is started at login (the lazy
@@ -54,14 +54,6 @@ vm_running() {
 }
 
 DEADLINE=$(( $(date +%s) + TUNNEL_WAIT ))
-
-if ! vm_running; then
-    if [[ "$TUNNEL_START_VM" == "yes" ]] && vm_exists "$VM_NAME"; then
-        echo "VM '$VM_NAME' is not running; starting it..."
-        vm_start "$VM_NAME" || true
-        DEADLINE=$(( $(date +%s) + TUNNEL_WAIT ))
-    fi
-fi
 
 while ! vm_running; do
     if [[ "$(date +%s)" -ge "$DEADLINE" ]]; then

@@ -46,8 +46,9 @@ open per configured service. It:
   no polling and no resource use while the VM is down;
 - reconnects by itself after a VM restart (the restart drops the SSH
   connection, the service re-establishes it);
-- starts at login but stays inert while the VM is off, unless
-  `TUNNEL_START_VM="yes"`.
+- never starts the VM: starting the VM through aibox (`aibox start`, `aibox`,
+  `aibox restart`) starts the tunnel with it;
+- is not started at login, so nothing runs while the VM is off.
 
 ### Lifecycle
 
@@ -61,6 +62,15 @@ open per configured service. It:
 | `aibox tunnel start/stop/restart` | Control the tunnel without touching the VM |
 | `aibox tunnel status` | Tunnel state, bind mode and URLs |
 | `aibox tunnel logs` | Last tunnel logs |
+
+### Always-on at login (optional)
+
+If you want the service URLs to work as soon as you log in, add `aibox start`
+to your desktop startup applications (GNOME/KDE "Startup Applications",
+macOS "Login Items"). The VM then starts at login and the tunnel follows it.
+
+aibox deliberately does not do this by itself: nothing runs (and no port is
+open) while you are not using the VM.
 
 ### LAN exposure
 
@@ -216,7 +226,6 @@ Tunnel settings:
 ```
 TUNNEL_BIND="local"          # "local" (127.0.0.1) or "lan" (0.0.0.0)
 TUNNEL_LAN_TIMEOUT="2h"      # default 'lan on' auto-revert delay
-TUNNEL_START_VM="no"         # service starts the VM when it is off
 TUNNEL_WAIT="120"            # seconds the tunnel waits for the VM
 ```
 

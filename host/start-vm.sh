@@ -27,6 +27,10 @@ else
     exit 1
 fi
 
+# Bring the tunnel service up with the VM (a no-op when it is not installed,
+# or when the service is already running).
+"$SCRIPT_DIR/cmd/tunnel" ensure >/dev/null 2>&1 || true
+
 load_vm_info "$VM_NAME"
 
 if [[ -n "$GUEST_IP" ]] && nc -z -w 1 "$GUEST_IP" 22 &>/dev/null; then

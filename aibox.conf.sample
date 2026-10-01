@@ -38,5 +38,4 @@ CONFIGURE_VIRTIOFS="no"
 # Tunnel service (exposes VM services on the host)
 # TUNNEL_BIND="local"          # "local" (127.0.0.1) or "lan" (0.0.0.0)
 # TUNNEL_LAN_TIMEOUT="2h"      # default auto-revert delay for 'tunnel lan on'
-# TUNNEL_START_VM="no"         # service starts the VM when it is off
 # TUNNEL_WAIT="120"            # seconds the tunnel waits for the VM
