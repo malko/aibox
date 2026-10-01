@@ -41,6 +41,11 @@ svc_install() {
 <dict>
     <key>Label</key>
     <string>$SVC_LAUNCHD_LABEL</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>$PATH</string>
+    </dict>
     <key>ProgramArguments</key>
     <array>
         <string>$SCRIPT_DIR/host/tunnel.sh</string>
