@@ -26,7 +26,7 @@ services:
     container_name: vscode-server
     restart: unless-stopped
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     volumes:
       - /home/$USER_NAME/git:/home/coder/git
       - ./config:/home/coder/.config

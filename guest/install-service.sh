@@ -26,6 +26,12 @@ echo "==> opencode found: $OPENCODE_PATH"
 
 echo -n "Set opencode web password (user:opencode, empty for no password): "
 read -s PASSWORD
+echo ""
+
+if [ -z "$PASSWORD" ]; then
+    echo "Warning: no password set. Keep this service on localhost only;"
+    echo "         'aibox tunnel lan on' will warn before LAN exposure."
+fi
 
 WRAPPER_DIR="$HOME_DIR/.local/bin"
 WRAPPER_SCRIPT="$WRAPPER_DIR/opencode-web-runner"
@@ -42,14 +48,14 @@ if [ "$NVM_SOURCED" = true ]; then
 export NVM_DIR="\$HOME/.nvm"
 export OPENCODE_SERVER_PASSWORD="$PASSWORD"
 [ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
-exec opencode web --hostname 0.0.0.0
+exec opencode web --hostname 127.0.0.1
 EOFWRAPPER
     echo "==> Wrapper created with NVM support"
 else
     cat > "$WRAPPER_SCRIPT" << EOFWRAPPER
 #!/bin/bash
 export OPENCODE_SERVER_PASSWORD="$PASSWORD"
-exec opencode web --hostname 0.0.0.0
+exec opencode web --hostname 127.0.0.1
 EOFWRAPPER
     echo "==> Wrapper created without NVM"
 fi
