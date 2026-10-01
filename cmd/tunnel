@@ -16,10 +16,14 @@ source "$SCRIPT_DIR/shared-funcs.sh"
 source "$SCRIPT_DIR/config-funcs.sh"
 init_config_file
 source "$SCRIPT_DIR/host/service.sh"
-source "$SCRIPT_DIR/host/vm.sh"
+source "$SCRIPT_DIR/host/backend.sh"
 
 VM_NAME=$(get_config "VM_NAME" "aibox")
-GUEST_USER=$(get_config "GUEST_USER" "aibox")
+if [[ "$VM_BACKEND" == "lima" ]]; then
+    GUEST_USER="$(vm_default_guest_user)"
+else
+    GUEST_USER=$(get_config "GUEST_USER" "aibox")
+fi
 SERVICES_FILE="${HOME}/.config/aibox/services.json"
 
 usage() {
@@ -103,24 +107,17 @@ lan_security_warnings() {
         return 0
     fi
 
-    local ip target
-    ip=$(vm_ip "$VM_NAME")
-    if [[ -z "$ip" ]]; then
-        print_info "Guest IP unknown: skipping authentication checks."
-        return 0
-    fi
-    target="$GUEST_USER@$ip"
-
-    if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" true &>/dev/null; then
+    vm_resolve "$VM_NAME"
+    if ! vm_ssh_ready "$VM_NAME"; then
         print_info "VM not reachable over SSH: skipping authentication checks."
         return 0
     fi
 
     local warnings=0
 
-    if ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" \
+    if vm_ssh -o BatchMode=yes -o ConnectTimeout=5 -- \
         "systemctl --user is-enabled opencode-web.service" &>/dev/null; then
-        if ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" \
+        if vm_ssh -o BatchMode=yes -o ConnectTimeout=5 -- \
             "grep -q 'OPENCODE_SERVER_PASSWORD=\"\"' ~/.local/bin/opencode-web-runner"; then
             print_warn "opencode-web has no password: exposing it on the LAN is unsafe."
             warnings=1
@@ -129,9 +126,9 @@ lan_security_warnings() {
         fi
     fi
 
-    if ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" \
+    if vm_ssh -o BatchMode=yes -o ConnectTimeout=5 -- \
         "test -f ~/vscode-server/docker-compose.yml"; then
-        if ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" \
+        if vm_ssh -o BatchMode=yes -o ConnectTimeout=5 -- \
             "grep -q -- '--auth password' ~/vscode-server/docker-compose.yml && grep -q 'PASSWORD=.' ~/vscode-server/docker-compose.yml"; then
             print_info "vscode-server: password protected."
         else
