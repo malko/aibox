@@ -124,4 +124,20 @@ check_requirements() {
     fi
 }
 
+# True when running on macOS (Darwin).
+is_macos() {
+    [[ "$(uname -s)" == "Darwin" ]]
+}
+
+# mDNS name of the host. macOS `hostname` already reports the .local suffix,
+# so only append it when it is missing (Linux).
+host_local_name() {
+    local name
+    name=$(hostname)
+    if [[ "$name" != *.* ]]; then
+        name="${name}.local"
+    fi
+    printf '%s\n' "$name"
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

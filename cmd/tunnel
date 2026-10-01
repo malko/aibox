@@ -1,0 +1,409 @@
+#!/bin/bash
+set -e
+
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_SOURCE" ]]; do
+    SOURCE_LINK="$(readlink "$SCRIPT_SOURCE")"
+    if [[ "$SOURCE_LINK" == /* ]]; then
+        SCRIPT_SOURCE="$SOURCE_LINK"
+    else
+        SCRIPT_SOURCE="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)/$SOURCE_LINK"
+    fi
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
+CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
+source "$SCRIPT_DIR/shared-funcs.sh"
+source "$SCRIPT_DIR/config-funcs.sh"
+init_config_file
+source "$SCRIPT_DIR/host/service.sh"
+source "$SCRIPT_DIR/host/vm.sh"
+
+VM_NAME=$(get_config "VM_NAME" "aibox")
+GUEST_USER=$(get_config "GUEST_USER" "aibox")
+SERVICES_FILE="${HOME}/.config/aibox/services.json"
+
+usage() {
+    echo "Usage: aibox tunnel <command> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  start                     Start the tunnel service"
+    echo "  stop                      Stop the tunnel service (VM keeps running)"
+    echo "  restart                   Restart the tunnel service"
+    echo "  status                    Show tunnel state and service URLs"
+    echo "  logs                      Show the last tunnel logs"
+    echo "  lan on [--timeout 2h]     Expose services on the LAN (0.0.0.0)"
+    echo "  lan off                   Back to localhost only"
+    echo "  install                   Install the user service on the host"
+    echo "  uninstall                 Remove the user service from the host"
+    echo ""
+    echo "Options for 'lan on':"
+    echo "  --timeout DUR             Auto-revert after DUR (e.g. 30m, 2h); 0 disables"
+    echo "  --no-timeout              Disable the automatic revert"
+    echo "  -y, --yes                 Do not ask for confirmation"
+    exit 0
+}
+
+duration_to_seconds() {
+    local d="$1"
+    case "$d" in
+        ""|"0") printf '%s\n' "0" ;;
+        *s) printf '%s\n' "${d%s}" ;;
+        *m) printf '%s\n' "$(( ${d%m} * 60 ))" ;;
+        *h) printf '%s\n' "$(( ${d%h} * 3600 ))" ;;
+        *) printf '%s\n' "$d" ;;
+    esac
+}
+
+service_urls() {
+    local bind_mode="$1"
+    [[ -f "$SERVICES_FILE" ]] || return 0
+    local name port host
+    while IFS=$'\t' read -r name port; do
+        [[ -z "$name" || -z "$port" ]] && continue
+        host="${port%%:*}"
+        if [[ "$bind_mode" == "lan" ]]; then
+            printf '  %-14s http://%s:%s  (LAN)\n' "$name" "$(host_local_name)" "$host"
+        fi
+        printf '  %-14s http://localhost:%s\n' "$name" "$host"
+    done < <(jq -r 'to_entries[] | "\(.key)\t\(.value)"' "$SERVICES_FILE" 2>/dev/null || true)
+}
+
+enforce_lan_timeout() {
+    local until
+    until=$(get_config "TUNNEL_LAN_UNTIL" "0")
+    [[ "$until" =~ ^[0-9]+$ ]] || return 0
+    [[ "$until" -gt 0 ]] || return 0
+    [[ "$(date +%s)" -lt "$until" ]] && return 0
+
+    save_config "TUNNEL_BIND" "local"
+    save_config "TUNNEL_LAN_UNTIL" "0"
+    if svc_require >/dev/null 2>&1 && svc_installed && svc_is_active; then
+        svc_restart || true
+    fi
+    print_info "LAN exposure expired: back to localhost only."
+}
+
+# lan_security_warnings returns 1 when a service is exposed without
+# authentication and the user should confirm.
+lan_security_warnings() {
+    if [[ "$(vm_state "$VM_NAME")" != "running" ]]; then
+        print_info "VM not running: nothing is exposed until it starts."
+        return 0
+    fi
+
+    local ip target
+    ip=$(vm_ip "$VM_NAME")
+    if [[ -z "$ip" ]]; then
+        print_info "Guest IP unknown: skipping authentication checks."
+        return 0
+    fi
+    target="$GUEST_USER@$ip"
+
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" true &>/dev/null; then
+        print_info "VM not reachable over SSH: skipping authentication checks."
+        return 0
+    fi
+
+    local warnings=0
+
+    if ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" \
+        "systemctl --user is-enabled opencode-web.service" &>/dev/null; then
+        if ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" \
+            "grep -q 'OPENCODE_SERVER_PASSWORD=\"\"' ~/.local/bin/opencode-web-runner"; then
+            print_warn "opencode-web has no password: exposing it on the LAN is unsafe."
+            warnings=1
+        else
+            print_info "opencode-web: password protected."
+        fi
+    fi
+
+    if ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" \
+        "test -f ~/vscode-server/docker-compose.yml"; then
+        if ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" \
+            "grep -q -- '--auth password' ~/vscode-server/docker-compose.yml && grep -q 'PASSWORD=.' ~/vscode-server/docker-compose.yml"; then
+            print_info "vscode-server: password protected."
+        else
+            print_warn "vscode-server: password authentication not detected."
+            warnings=1
+        fi
+    fi
+
+    # dsh-web connection URLs embed an authentication token: no warning.
+    return "$warnings"
+}
+
+schedule_lan_revert() {
+    local seconds="$1"
+    [[ "$seconds" -gt 0 ]] || return 0
+
+    if command -v systemd-run &>/dev/null && systemctl --user show-environment &>/dev/null; then
+        systemd-run --user --on-active="${seconds}s" --collect \
+            "$SCRIPT_DIR/cmd/tunnel" lan off >/dev/null 2>&1 && return 0
+    fi
+
+    # Fallback: a detached reverter (idempotent, lost on reboot; the lazy
+    # check in enforce_lan_timeout covers that case).
+    nohup sh -c "sleep $seconds; '$SCRIPT_DIR/cmd/tunnel' lan off" >/dev/null 2>&1 &
+}
+
+svc_or_die() {
+    svc_require
+}
+
+ACTION="${1:-}"
+if [[ $# -gt 0 ]]; then
+    shift
+fi
+
+case "$ACTION" in
+    installed)
+        if svc_require >/dev/null 2>&1 && svc_installed; then
+            exit 0
+        fi
+        exit 1
+        ;;
+
+    install)
+        svc_or_die
+        svc_install
+        print_success "Installed $SVC_UNIT_NAME"
+        echo "The service starts at login and stays inert while the VM is off."
+        echo "Start it now with: aibox tunnel start"
+        ;;
+
+    uninstall)
+        svc_or_die
+        if svc_installed; then
+            svc_uninstall
+            print_success "Removed $SVC_UNIT_NAME"
+        else
+            print_info "Tunnel service is not installed."
+        fi
+        ;;
+
+    start)
+        svc_or_die
+        enforce_lan_timeout
+        if ! svc_installed; then
+            print_error "Tunnel service is not installed. Run 'aibox tunnel install' first."
+            exit 1
+        fi
+        svc_start
+        print_success "Tunnel service started."
+        ;;
+
+    stop)
+        if svc_require >/dev/null 2>&1 && svc_installed; then
+            svc_stop
+            print_success "Tunnel service stopped (the VM keeps running)."
+        else
+            print_info "Tunnel service is not installed/running."
+        fi
+        ;;
+
+    restart)
+        svc_or_die
+        if ! svc_installed; then
+            print_error "Tunnel service is not installed. Run 'aibox tunnel install' first."
+            exit 1
+        fi
+        svc_restart
+        print_success "Tunnel service restarted."
+        ;;
+
+    # ensure: start the service only when it is not already running and the VM
+    # is up. Used after 'aibox restart' so a self-healing tunnel is not killed.
+    ensure)
+        enforce_lan_timeout
+        if svc_require >/dev/null 2>&1 && svc_installed && ! svc_is_active; then
+            if [[ "$(vm_state "$VM_NAME")" == "running" ]]; then
+                svc_start || true
+            fi
+        fi
+        ;;
+
+    # reload: pick up service/port changes. Restarts only when the VM is up.
+    reload)
+        enforce_lan_timeout
+        if svc_require >/dev/null 2>&1 && svc_installed; then
+            if [[ "$(vm_state "$VM_NAME")" == "running" ]]; then
+                if svc_is_active; then
+                    svc_restart || true
+                else
+                    svc_start || true
+                fi
+            fi
+        fi
+        ;;
+
+    logs)
+        svc_or_die
+        if svc_installed; then
+            svc_logs
+        else
+            print_info "Tunnel service is not installed."
+        fi
+        ;;
+
+    status)
+        enforce_lan_timeout
+        echo "Tunnel:"
+        if [[ "$(vm_state "$VM_NAME")" == "running" ]]; then
+            echo "  VM:       $VM_NAME (running)"
+        elif vm_exists "$VM_NAME"; then
+            echo "  VM:       $VM_NAME ($(vm_state "$VM_NAME"))"
+        else
+            echo "  VM:       $VM_NAME (not created)"
+        fi
+
+        if svc_require >/dev/null 2>&1; then
+            if svc_installed; then
+                echo "  Service:  $(svc_status_text)"
+            else
+                echo "  Service:  not installed (run: aibox tunnel install)"
+            fi
+        else
+            echo "  Service:  unsupported on this platform"
+        fi
+
+        bind_mode=$(get_config "TUNNEL_BIND" "local")
+        echo "  Bind:     $bind_mode"
+        if [[ "$bind_mode" == "lan" ]]; then
+            lan_until=$(get_config "TUNNEL_LAN_UNTIL" "0")
+            if [[ "$lan_until" =~ ^[0-9]+$ ]] && [[ "$lan_until" -gt 0 ]]; then
+                echo "  LAN until: $(date -d "@$lan_until" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -r "$lan_until" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "$lan_until")"
+            else
+                echo "  LAN until: no timeout (use 'aibox tunnel lan off')"
+            fi
+        fi
+
+        echo "  Services:"
+        service_urls "$bind_mode"
+        ;;
+
+    lan)
+        SUBACTION="${1:-}"
+        shift || true
+        TIMEOUT_OVERRIDE=""
+        NO_TIMEOUT=false
+        ASSUME_YES=false
+
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --timeout)
+                    TIMEOUT_OVERRIDE="$2"
+                    shift 2
+                    ;;
+                --timeout=*)
+                    TIMEOUT_OVERRIDE="${1#*=}"
+                    shift
+                    ;;
+                --no-timeout)
+                    NO_TIMEOUT=true
+                    shift
+                    ;;
+                -y|--yes)
+                    ASSUME_YES=true
+                    shift
+                    ;;
+                *)
+                    print_error "Unknown option: $1"
+                    exit 1
+                    ;;
+            esac
+        done
+
+        case "$SUBACTION" in
+            on)
+                enforce_lan_timeout
+
+                if [[ "$NO_TIMEOUT" == "true" ]]; then
+                    TIMEOUT_S=0
+                elif [[ -n "$TIMEOUT_OVERRIDE" ]]; then
+                    TIMEOUT_S="$(duration_to_seconds "$TIMEOUT_OVERRIDE")"
+                else
+                    TIMEOUT_S="$(duration_to_seconds "$(get_config "TUNNEL_LAN_TIMEOUT" "2h")")"
+                fi
+
+                if [[ ! "$TIMEOUT_S" =~ ^[0-9]+$ ]]; then
+                    print_error "Invalid timeout: $TIMEOUT_OVERRIDE"
+                    exit 1
+                fi
+
+                if ! lan_security_warnings; then
+                    if [[ "$ASSUME_YES" != "true" ]]; then
+                        if [[ -t 0 ]]; then
+                            if ! prompt_yes_no "Expose these services on the LAN anyway?" "no"; then
+                                print_info "Cancelled."
+                                exit 0
+                            fi
+                        else
+                            print_error "Refusing to expose services on the LAN unattended; use --yes."
+                            exit 1
+                        fi
+                    fi
+                fi
+
+                save_config "TUNNEL_BIND" "lan"
+                if [[ "$TIMEOUT_S" -gt 0 ]]; then
+                    save_config "TUNNEL_LAN_UNTIL" "$(( $(date +%s) + TIMEOUT_S ))"
+                else
+                    save_config "TUNNEL_LAN_UNTIL" "0"
+                fi
+
+                if svc_require >/dev/null 2>&1 && svc_installed; then
+                    if svc_is_active; then
+                        svc_restart || true
+                    else
+                        svc_start || true
+                    fi
+                else
+                    print_info "Tunnel service not installed; mode saved and will apply once installed."
+                fi
+
+                schedule_lan_revert "$TIMEOUT_S"
+
+                print_success "Services exposed on the LAN."
+                if [[ "$TIMEOUT_S" -gt 0 ]]; then
+                    print_info "Automatic revert to localhost in $TIMEOUT_OVERRIDE."
+                fi
+                service_urls "lan"
+                ;;
+
+            off)
+                enforce_lan_timeout
+                current_bind=$(get_config "TUNNEL_BIND" "local")
+                current_until=$(get_config "TUNNEL_LAN_UNTIL" "0")
+                if [[ "$current_bind" != "lan" && "$current_until" == "0" ]]; then
+                    print_info "Tunnel is already localhost-only."
+                    exit 0
+                fi
+
+                save_config "TUNNEL_BIND" "local"
+                save_config "TUNNEL_LAN_UNTIL" "0"
+
+                if svc_require >/dev/null 2>&1 && svc_installed && svc_is_active; then
+                    svc_restart || true
+                fi
+
+                print_success "Services are now localhost-only."
+                service_urls "local"
+                ;;
+
+            *)
+                echo "Usage: aibox tunnel lan on [--timeout 2h] [--no-timeout] | lan off"
+                exit 1
+                ;;
+        esac
+        ;;
+
+    ""|help|-h|--help)
+        usage
+        ;;
+
+    *)
+        print_error "Unknown tunnel command: $ACTION"
+        echo "Run 'aibox tunnel help' for usage." >&2
+        exit 1
+        ;;
+esac
