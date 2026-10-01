@@ -3,9 +3,10 @@
 #
 # Sourced by host/service.sh. Provides the svc_* interface.
 #
-# The tunnel runs as a per-user LaunchAgent (gui/$UID). KeepAlive only restarts
-# the job on non-zero exit: host/tunnel.sh exits 0 when the VM is off, so an
-# idle VM leaves the agent loaded but stopped.
+# The tunnel runs as a per-user LaunchAgent (gui/$UID). RunAtLoad is false:
+# the agent is loaded at login but does not run until the aibox CLI starts it
+# (and it is never the one starting the VM). KeepAlive only restarts the job on
+# non-zero exit, so an idle VM leaves the agent loaded but stopped.
 
 SVC_LAUNCHD_LABEL="com.aibox.tunnel"
 SVC_PLIST_DIR="$HOME/Library/LaunchAgents"
@@ -45,7 +46,7 @@ svc_install() {
         <string>$SCRIPT_DIR/host/tunnel.sh</string>
     </array>
     <key>RunAtLoad</key>
-    <true/>
+    <false/>
     <key>KeepAlive</key>
     <dict>
         <key>SuccessfulExit</key>
@@ -62,6 +63,8 @@ svc_install() {
 EOF
     svc_bootout
     svc_bootstrap
+    # Loaded at login, but not started until the aibox CLI asks for it
+    # (RunAtLoad is false), so nothing runs while the VM is off.
 }
 
 svc_uninstall() {
