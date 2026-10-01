@@ -31,36 +31,97 @@ sudo apt install virsh libvirt-client
 ## Network Model
 
 The VM is deliberately not reachable from your network: guest services listen
-on the guest's localhost, and nothing is exposed until you run `aibox`.
+on the guest's localhost (`127.0.0.1`), and the host only exposes them through
+an authenticated SSH tunnel managed as a user service.
 
-`aibox` opens an SSH session to the VM and creates one local tunnel per
-service/port:
+### Tunnel service
 
-- services from `~/.config/aibox/services.json` are forwarded automatically;
-- extra `[host:]guest` ports can be passed on the command line;
-- each tunnel is `-L 0.0.0.0:<host_port>:127.0.0.1:<guest_port>`, so a service
-  is reachable at `http://localhost:<host_port>` while the session runs;
-- `-n/--no-service` connects without forwarding the configured services;
-- `-p/--peon-relay` additionally opens a reverse tunnel (guest to host,
-  port 19998).
+`aibox tunnel install` (or the `tunnel` setup step) installs a user service
+(`systemd --user` on Linux, LaunchAgent on macOS) that keeps one SSH tunnel
+open per configured service. It:
 
-Because the ports are bound on `0.0.0.0`, the forwarded services are also
-reachable from the LAN via `http://<hostname>.local:<host_port>` — but only
-while `aibox` is running. Closing the SSH session (Ctrl-D, network drop, laptop
-sleep) tears all the tunnels down and the services become unreachable again.
+- binds on `127.0.0.1` by default: services are reachable from the host only,
+  at `http://localhost:<port>`;
+- waits for the VM (`TUNNEL_WAIT`, 120s) when it is off, then stops cleanly:
+  no polling and no resource use while the VM is down;
+- reconnects by itself after a VM restart (the restart drops the SSH
+  connection, the service re-establishes it);
+- starts at login but stays inert while the VM is off, unless
+  `TUNNEL_START_VM="yes"`.
 
-In short: no `aibox` session, no exposed service. This is why the opencode web
-interface is at `http://localhost:4096` rather than on the VM's IP.
+### Lifecycle
+
+| Command | Effect |
+|---|---|
+| `aibox start` | Start the VM and the tunnel service (no shell) |
+| `aibox` | Start the VM + tunnel, then open a shell (ad-hoc ports only) |
+| `aibox status` | VM state, service URLs and tunnel state |
+| `aibox shutdown` | Stop the tunnel service, then shut the VM down |
+| `aibox restart` | Restart the VM; the tunnel reconnects automatically |
+| `aibox tunnel start/stop/restart` | Control the tunnel without touching the VM |
+| `aibox tunnel status` | Tunnel state, bind mode and URLs |
+| `aibox tunnel logs` | Last tunnel logs |
+
+### LAN exposure
+
+`aibox tunnel lan on` rebinds the tunnels on `0.0.0.0`, making the services
+reachable from the LAN at `http://<hostname>.local:<port>`. Before exposing,
+aibox checks the guest for unauthenticated services and warns (opencode-web
+without a password, vscode-server without password auth). dsh-web connection
+URLs embed an authentication token, so no warning is needed.
+
+The exposure is time-limited: it reverts to localhost after
+`TUNNEL_LAN_TIMEOUT` (default `2h`). `--timeout 30m` overrides it,
+`--no-timeout` (or `--timeout 0`) disables the automatic revert, and
+`aibox tunnel lan off` turns it off immediately. The expiry survives reboots
+(it is checked lazily on the next command).
+
+### Ad-hoc ports
+
+`aibox 8081:80` forwards an extra port inside the SSH session only. It binds
+to localhost unless `--lan` is given, and disappears when the session ends.
+Ad-hoc ports are for throwaway use; configured services belong in
+`services.json` and are handled by the tunnel service.
+
+### Host share
+
+Host `~/git` is deliberately mounted writable inside the VM so agents work
+directly on your repositories. This is a conscious trade-off: the agent can
+modify your working copies, so keep pushes manual from the host and never put
+repository credentials inside the VM.
 
 ## Usage
 
 ### Connect to VM
 
 ```bash
-./aibox                      # Connect with all configured services
-./aibox 8081:80             # Forward host 8081 to guest 80
-./aibox 3000 8081           # Forward multiple ports
-./aibox -w                   # Connect and open browser
+./aibox                      # Start VM + tunnel, then open a shell
+./aibox 8081:80             # Also forward host 8081 to guest 80 (session only)
+./aibox --lan 3000          # Ad-hoc forward exposed on the LAN
+./aibox -w                   # Open the browser for the first service
+```
+
+### Start / status
+
+```bash
+./aibox start                 # Start VM + tunnel without opening a shell
+./aibox status                # VM state, service URLs, tunnel state
+./aibox shutdown              # Stop tunnel + shutdown VM
+./aibox restart               # Restart VM (tunnel reconnects automatically)
+```
+
+### Tunnel management
+
+```bash
+./aibox tunnel status                 # Tunnel state, bind mode, URLs
+./aibox tunnel start                  # Start the tunnel (VM keeps running)
+./aibox tunnel stop                   # Stop the tunnel (VM keeps running)
+./aibox tunnel lan on                 # Expose services on the LAN (2h by default)
+./aibox tunnel lan on --timeout 30m   # ... for 30 minutes
+./aibox tunnel lan off                # Back to localhost only
+./aibox tunnel install                # Install the user service
+./aibox tunnel uninstall              # Remove the user service
+./aibox tunnel logs                   # Last tunnel logs
 ```
 
 ### Service Management
@@ -123,7 +184,7 @@ aibox setup motd              # Same, through the main CLI
 
 Steps (in order): `vm`, `ssh`, `scripts`, `deps`, `sshd`, `git`, `dirs`,
 `hosts`, `motd`, `docker`, `vscode`, `opencode`, `dsh`, `update-check`,
-`virtiofs`, `cli`. Each step is implemented in `setup/steps/`.
+`virtiofs`, `cli`, `tunnel`. Each step is implemented in `setup/steps/`.
 
 Answers are stored in the config file and reused as defaults; a step only
 prompts for the values it needs.
@@ -150,6 +211,15 @@ VM_NAME="ai-agentbox"
 GUEST_USER="aibox"
 ```
 
+Tunnel settings:
+
+```
+TUNNEL_BIND="local"          # "local" (127.0.0.1) or "lan" (0.0.0.0)
+TUNNEL_LAN_TIMEOUT="2h"      # default 'lan on' auto-revert delay
+TUNNEL_START_VM="no"         # service starts the VM when it is off
+TUNNEL_WAIT="120"            # seconds the tunnel waits for the VM
+```
+
 ### OpenCode Config
 
 Edit `~/.config/opencode/opencode.json` in the VM to configure AI providers.
@@ -164,6 +234,9 @@ aibox/
 │   ├── lib.sh                   # Step registry, prerequisites, runner
 │   └── steps/                   # One script per step (vm, ssh, motd, dsh, ...)
 ├── cmd/                         # Command scripts
+│   ├── start                    # Start VM + tunnel (no shell)
+│   ├── status                   # VM state, URLs, tunnel state
+│   ├── tunnel                   # Manage the tunnel user service
 │   ├── service-add              # Add service
 │   ├── service-remove           # Remove service
 │   ├── service-list             # List services
@@ -174,6 +247,10 @@ aibox/
 │   ├── vm-restart               # Restart VM
 │   └── vm-snapshot              # Manage snapshots
 ├── host/                        # Host-side scripts
+│   ├── tunnel.sh                # Tunnel service entry point (ssh -N -L)
+│   ├── service.sh               # Service manager selection
+│   ├── services/                # systemd --user / launchd implementations
+│   ├── vm.sh                    # VM helpers (libvirt)
 │   ├── create-vm.sh             # Create VM
 │   ├── start-vm.sh              # Start VM
 │   ├── configure-ssh.sh         # SSH setup
@@ -191,6 +268,12 @@ aibox/
 
 ## Security Notes
 
+- Services are exposed on localhost only by default; use `aibox tunnel lan on`
+  (time-limited) when you really need LAN access
+- opencode-web and vscode-server should keep a password; aibox warns before
+  LAN exposure when they do not
+- The host `~/git` share is writable by design: the agent can modify your
+  working copies, so review changes and push from the host
 - Create a separate git account for your agents
 - Never let the VM push directly to main repositories
 - Keep SSH keys secure and never commit them

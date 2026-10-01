@@ -10,6 +10,8 @@ This repository contains bash scripts for managing an AI development VM with KVM
   - `setup.sh` - Setup runner (also `aibox setup`)
   - `setup/lib.sh` - Step registry and prerequisite resolution
   - `setup/steps/*.sh` - One self-contained step per file
+  - `host/tunnel.sh` - Tunnel service entry point (ssh -N, one -L per service)
+  - `host/service.sh` + `host/services/` - User service manager (systemd --user)
   - `cmd/` - Service and VM management commands
 
 ## Commands
@@ -27,6 +29,17 @@ This repository contains bash scripts for managing an AI development VM with KVM
 ./aibox
 ./aibox 4096                    # Forward host 4096 to guest 4096
 ./aibox 8081:80 3000           # Multiple ports
+
+# VM and tunnel lifecycle
+./aibox start                   # Start VM + tunnel service (no shell)
+./aibox status                  # VM state, service URLs, tunnel state
+./aibox tunnel start            # Start the tunnel only (VM keeps running)
+./aibox tunnel stop             # Stop the tunnel only
+./aibox tunnel install          # Install the tunnel user service
+./aibox tunnel lan on           # Expose services on the LAN (time-limited)
+./aibox tunnel lan off          # Back to localhost only
+./aibox shutdown                # Stop tunnel + shutdown VM
+./aibox restart                 # Restart VM (tunnel self-heals)
 
 # Service management
 ./aibox service-add opencode 4096
