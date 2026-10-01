@@ -68,6 +68,20 @@ service_urls() {
     done < <(jq -r 'to_entries[] | "\(.key)\t\(.value)"' "$SERVICES_FILE" 2>/dev/null || true)
 }
 
+# svc_refresh applies config changes to the tunnel service. It starts the
+# service when it is stopped (for example after a transient failure) and
+# restarts it when it is already running. No-op when the VM is not running.
+svc_refresh() {
+    svc_require >/dev/null 2>&1 || return 0
+    svc_installed || return 0
+    [[ "$(vm_state "$VM_NAME")" == "running" ]] || return 0
+    if svc_is_active; then
+        svc_restart || true
+    else
+        svc_start || true
+    fi
+}
+
 enforce_lan_timeout() {
     local until
     until=$(get_config "TUNNEL_LAN_UNTIL" "0")
@@ -77,9 +91,7 @@ enforce_lan_timeout() {
 
     save_config "TUNNEL_BIND" "local"
     save_config "TUNNEL_LAN_UNTIL" "0"
-    if svc_require >/dev/null 2>&1 && svc_installed && svc_is_active; then
-        svc_restart || true
-    fi
+    svc_refresh
     print_info "LAN exposure expired: back to localhost only."
 }
 
@@ -226,18 +238,10 @@ case "$ACTION" in
         fi
         ;;
 
-    # reload: pick up service/port changes. Restarts only when the VM is up.
+    # reload: pick up service/port changes once the VM is up.
     reload)
         enforce_lan_timeout
-        if svc_require >/dev/null 2>&1 && svc_installed; then
-            if [[ "$(vm_state "$VM_NAME")" == "running" ]]; then
-                if svc_is_active; then
-                    svc_restart || true
-                else
-                    svc_start || true
-                fi
-            fi
-        fi
+        svc_refresh
         ;;
 
     logs)
@@ -263,6 +267,9 @@ case "$ACTION" in
         if svc_require >/dev/null 2>&1; then
             if svc_installed; then
                 echo "  Service:  $(svc_status_text)"
+                if [[ "$(vm_state "$VM_NAME")" == "running" ]] && ! svc_is_active; then
+                    echo "  Hint:     'aibox tunnel logs' shows why it is not running."
+                fi
             else
                 echo "  Service:  not installed (run: aibox tunnel install)"
             fi
@@ -356,11 +363,7 @@ case "$ACTION" in
                 fi
 
                 if svc_require >/dev/null 2>&1 && svc_installed; then
-                    if svc_is_active; then
-                        svc_restart || true
-                    else
-                        svc_start || true
-                    fi
+                    svc_refresh
                 else
                     print_info "Tunnel service not installed; mode saved and will apply once installed."
                 fi
@@ -386,9 +389,7 @@ case "$ACTION" in
                 save_config "TUNNEL_BIND" "local"
                 save_config "TUNNEL_LAN_UNTIL" "0"
 
-                if svc_require >/dev/null 2>&1 && svc_installed && svc_is_active; then
-                    svc_restart || true
-                fi
+                svc_refresh
 
                 print_success "Services are now localhost-only."
                 service_urls "local"

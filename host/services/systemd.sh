@@ -60,9 +60,14 @@ svc_status_text() {
         printf '%s\n' "not installed"
         return 0
     fi
-    local state
+    local state result
     state=$(systemctl --user is-active "$SVC_UNIT_NAME" 2>/dev/null || true)
-    printf '%s\n' "${state:-unknown}"
+    state="${state:-unknown}"
+    if [[ "$state" == "failed" ]]; then
+        result=$(systemctl --user show -p Result --value "$SVC_UNIT_NAME" 2>/dev/null || true)
+        state="failed (${result:-unknown})"
+    fi
+    printf '%s\n' "$state"
 }
 
 svc_apply_if_active() {

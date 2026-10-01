@@ -57,8 +57,15 @@ DEADLINE=$(( $(date +%s) + TUNNEL_WAIT ))
 
 while ! vm_running; do
     if [[ "$(date +%s)" -ge "$DEADLINE" ]]; then
-        echo "VM '$VM_NAME' is not running; stopping the tunnel service (no polling)."
-        exit 0
+        last_state=$(vm_state "$VM_NAME")
+        if [[ "$last_state" == "shut off" ]]; then
+            echo "VM '$VM_NAME' is shut off; stopping the tunnel service (no polling)."
+            exit 0
+        fi
+        # Unknown/error state: keep the service alive so the manager retries
+        # instead of silently giving up while the VM may still be running.
+        echo "VM '$VM_NAME' is not reachable (state: ${last_state:-unknown}); retrying." >&2
+        exit 1
     fi
     sleep 3
 done
