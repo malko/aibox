@@ -98,7 +98,11 @@ done
 
 echo "Tunnel up on $BIND -> $GUEST_IP (${PORTS[*]})"
 
-exec ssh -o ExitOnForwardFailure=yes \
+# -N: no remote command/shell (without it ssh opens a shell, prints the MOTD
+# and exits 0, leaving the service silently inactive).
+# -n: never read from stdin (the unit runs without a terminal).
+exec ssh -N -n \
+    -o ExitOnForwardFailure=yes \
     -o BatchMode=yes \
     -o ConnectTimeout=10 \
     -o ServerAliveInterval=30 \
