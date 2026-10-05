@@ -34,7 +34,7 @@ virsh -c "$LIBVIRT_DEFAULT_URI" shutdown "$VM_NAME" 2>/dev/null || true
 
 STATE=""
 for i in {1..30}; do
-    STATE=$(virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null || echo "unknown")
+    STATE=$(LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null || echo "unknown")
     [[ "$STATE" == "shut off" ]] && break
     sleep 1
 done

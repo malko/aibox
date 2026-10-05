@@ -17,9 +17,11 @@ vm_exists() {
 }
 
 # Normalized states: running, shut off, paused, unknown.
+# LC_ALL=C keeps virsh output in English: libvirt translates domain states
+# (e.g. "en cours d'exécution" on a French locale), which would never match.
 vm_state() {
     local state
-    state=$(virsh -c "$(vm_uri)" domstate "$1" 2>/dev/null) || state=""
+    state=$(LC_ALL=C virsh -c "$(vm_uri)" domstate "$1" 2>/dev/null) || state=""
     if [[ -z "$state" ]]; then
         printf '%s\n' "unknown"
     else
