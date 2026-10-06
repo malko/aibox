@@ -100,6 +100,19 @@ directly on your repositories. This is a conscious trade-off: the agent can
 modify your working copies, so keep pushes manual from the host and never put
 repository credentials inside the VM.
 
+#### Don't forward your SSH agent into the VM
+
+An agent forwarded over SSH is equivalent to handing the VM your credentials:
+while the connection is open, anything in the VM (including agents) can ask
+your local ssh-agent to sign as you, e.g. to `git push`.
+
+- OpenSSH does not forward by default, but `ForwardAgent yes` (often set under
+  `Host *` in `~/.ssh/config`) or `ssh -A` turns it on. This is the setting that
+  matters: do not enable it for the VM, and scope it to specific hosts rather
+  than `Host *`.
+- Check from the VM: `echo $SSH_AUTH_SOCK` must be empty and `ssh-add -l` must
+  fail with "Could not open a connection to your authentication agent".
+
 ## Usage
 
 ### Connect to VM
