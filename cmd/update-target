@@ -45,7 +45,7 @@ run_target() {
 }
 
 if [[ "$TARGET" == "all" ]]; then
-    for target in scripts os opencode dsh vscode-server; do
+    for target in scripts os opencode dsh claude vscode-server; do
         echo ""
         echo "=== Updating: $target ==="
         run_target "$target" || { echo "Update failed: $target" >&2; exit 1; }

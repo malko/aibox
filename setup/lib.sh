@@ -21,6 +21,7 @@ SETUP_STEP_ORDER=(
     vscode
     opencode
     dsh
+    claude
     update-check
     virtiofs
     cli
@@ -42,6 +43,7 @@ declare -A SETUP_STEP_DEPS=(
     [vscode]="docker"
     [opencode]="deps"
     [dsh]="deps"
+    [claude]="deps"
     [update-check]="scripts"
     [virtiofs]="vm"
     [cli]=""
@@ -63,6 +65,7 @@ declare -A SETUP_STEP_DESC=(
     [vscode]="Install vscode-server"
     [opencode]="Install the opencode-web service"
     [dsh]="Install dsh and the dsh-web service"
+    [claude]="Install Claude Code"
     [update-check]="Install the automatic update check"
     [virtiofs]="Configure the virtiofs git share with the host"
     [cli]="Install the 'aibox' command and shell completion on the host"

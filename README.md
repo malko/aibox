@@ -168,8 +168,9 @@ Note: Snapshots are internal (embedded in qcow2 file). VM must be shut off to cr
 ./aibox update os -y              # Same, non-interactive
 ./aibox update opencode           # Update opencode + restart opencode-web
 ./aibox update dsh                # Update dsh + restart dsh-web
+./aibox update claude             # Update Claude Code
 ./aibox update vscode-server      # Pull and restart vscode-server
-./aibox update all                # scripts, os, opencode, dsh, vscode-server
+./aibox update all                # scripts, os, opencode, dsh, claude, vscode-server
 ./aibox check-updates             # Check for updates (aibox repo + VM)
 ./aibox self-update               # Pull the aibox repo and push scripts to the VM
 ```
@@ -193,7 +194,7 @@ aibox setup motd              # Same, through the main CLI
 ```
 
 Steps (in order): `vm`, `ssh`, `scripts`, `deps`, `sshd`, `git`, `dirs`,
-`hosts`, `motd`, `docker`, `vscode`, `opencode`, `dsh`, `update-check`,
+`hosts`, `motd`, `docker`, `vscode`, `opencode`, `dsh`, `claude`, `update-check`,
 `virtiofs`, `cli`, `tunnel`. Each step is implemented in `setup/steps/`.
 
 Answers are stored in the config file and reused as defaults; a step only
@@ -270,6 +271,7 @@ aibox/
 │   ├── install-service.sh       # Install opencode-web service
 │   ├── install-dsh.sh           # Install dsh CLI
 │   ├── install-dsh-service.sh   # Install dsh-web service
+│   ├── install-claude.sh        # Install Claude Code
 │   ├── update-check.sh          # Gather available updates
 │   └── install-update-check.sh  # Install the update check timer
 └── shared-funcs.sh              # Common functions

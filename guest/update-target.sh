@@ -11,7 +11,7 @@ fi
 
 if [[ -z "$TARGET" ]]; then
     echo "Usage: $0 <target> [options]"
-    echo "Targets: opencode, opencode-password, dsh, os, vscode-server"
+    echo "Targets: opencode, opencode-password, dsh, claude, os, vscode-server"
     exit 1
 fi
 
@@ -64,6 +64,18 @@ case "$TARGET" in
         sleep 2
         systemctl --user status dsh-web.service --no-pager
         ;;
+    claude)
+        if ! command -v claude &>/dev/null; then
+            echo "Claude Code not installed, skipping"
+            exit 0
+        fi
+        echo "Updating Claude Code..."
+        if ! command -v npm &>/dev/null; then
+            echo "Error: npm not found"
+            exit 1
+        fi
+        npm install -g @anthropic-ai/claude-code@latest
+        ;;
     vscode-server)
         cd "$HOME/vscode-server"
         if [[ -f "$HOME/vscode-server/docker-compose.yml" ]]; then
@@ -76,7 +88,7 @@ case "$TARGET" in
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Available targets: opencode, opencode-password, dsh, os, vscode-server"
+        echo "Available targets: opencode, opencode-password, dsh, claude, os, vscode-server"
         exit 1
         ;;
 esac

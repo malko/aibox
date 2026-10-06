@@ -28,6 +28,9 @@ INSTALL_NPM="yes"
 INSTALL_DSH="no"
 # DSH_PORT="3080"
 
+# Claude Code CLI
+INSTALL_CLAUDE="yes"
+
 # Automatic update check (boot + daily, shown in the MOTD)
 INSTALL_UPDATE_CHECK="yes"
 

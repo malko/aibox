@@ -27,7 +27,7 @@ if command -v npm >/dev/null 2>&1; then
     # --parseable fields: location:latest:current:wanted:dependent, each value
     # prefixed with "name@". Use 'current' ($3) and 'latest' ($4), not $2.
     NPM_OUTDATED=$(timeout 30 npm outdated -g --parseable 2>/dev/null \
-        | awk -F: '/opencode-ai|deepseek-ai\/dsh/ {
+        | awk -F: '/opencode-ai|deepseek-ai\/dsh|anthropic-ai\/claude-code/ {
               name=$3; sub(/@[^@]*$/, "", name)
               cur=$3; sub(/^.*@/, "", cur)
               latest=$4; sub(/^.*@/, "", latest)

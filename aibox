@@ -28,7 +28,7 @@ usage() {
     echo "  service-list                      List configured services"
     echo "  relay                             Enable/disable peon-ping relay by default"
     echo "  setup [step ...]                  Run setup steps (see 'aibox setup --help')"
-    echo "  update <target>                   Update (opencode, opencode-password, dsh, os, scripts, vscode-server, all)"
+    echo "  update <target>                   Update (opencode, opencode-password, dsh, claude, os, scripts, vscode-server, all)"
     echo "  check-updates                     Check for available updates (host + VM)"
     echo "  self-update                       Pull the aibox repo and push scripts to the VM"
     echo "  shutdown [-f]                     Stop tunnel + shutdown VM (use -f to force)"
@@ -88,7 +88,7 @@ commands=(
   'service-remove:remove a service'
   'service-list:list configured services'
   'setup:run setup steps'
-  'update:update service or app (opencode, opencode-password, dsh, os, scripts, vscode-server, all)'
+  'update:update service or app (opencode, opencode-password, dsh, claude, os, scripts, vscode-server, all)'
   'check-updates:check for available updates (host + VM)'
   'self-update:pull the aibox repo and push scripts to the VM'
   'shutdown:shutdown VM'
@@ -130,7 +130,7 @@ case $state in
         _values 'steps' $(aibox --setup-steps) all
         ;;
       update)
-        _values 'targets' 'opencode' 'opencode-password' 'dsh' 'os' 'scripts' 'vscode-server' 'all'
+        _values 'targets' 'opencode' 'opencode-password' 'dsh' 'claude' 'os' 'scripts' 'vscode-server' 'all'
         ;;
     esac
     ;;
@@ -172,7 +172,7 @@ _aibox() {
             return 0
             ;;
         update)
-            COMPREPLY=($(compgen -W "opencode opencode-password dsh os scripts vscode-server all" -- "${cur}"))
+            COMPREPLY=($(compgen -W "opencode opencode-password dsh claude os scripts vscode-server all" -- "${cur}"))
             return 0
             ;;
         shutdown|restart)
@@ -331,7 +331,7 @@ case "$1" in
         TARGET="$2"
         if [[ -z "$TARGET" ]]; then
             echo "Usage: aibox update <target> [options]"
-            echo "Targets: opencode, opencode-password, dsh, os, scripts, vscode-server, all"
+            echo "Targets: opencode, opencode-password, dsh, claude, os, scripts, vscode-server, all"
             echo "Options: -y, --yes    Non-interactive system upgrade (os/all)"
             exit 1
         fi
