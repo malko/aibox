@@ -73,7 +73,9 @@ guest_dsh_url() {
     ip=$(vm_ip "$VM_NAME")
     [[ -n "$ip" ]] || return 0
 
-    DSH_GUEST_URL=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$GUEST_USER@$ip" \
+    # -n: never read stdin, or ssh would swallow the remaining lines of the
+    # service list read by service_urls' while loop.
+    DSH_GUEST_URL=$(ssh -n -o BatchMode=yes -o ConnectTimeout=5 "$GUEST_USER@$ip" \
         'journalctl --user -u dsh-web.service -n 500 --no-pager -o cat 2>/dev/null | tr -d "\033" | grep -oE "https?://[^[:space:]\"]+" | tail -n 1' 2>/dev/null || true)
     printf '%s' "$DSH_GUEST_URL"
 }
