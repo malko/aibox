@@ -10,6 +10,11 @@ cat > /tmp/motd.sh << 'MOTDEND'
 #!/bin/sh
 # AIBOX MOTD: static banner + dynamic web service URLs.
 
+# Print only once, even when several startup files source this script
+# (bash reads /etc/profile.d, zsh is hooked from /etc/zsh/zprofile).
+[ -n "${AIBOX_MOTD_SHOWN:-}" ] && return 0
+AIBOX_MOTD_SHOWN=1
+
 CYAN='\033[0;36m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -118,5 +123,13 @@ MOTDEND
 
 sudo cp /tmp/motd.sh /etc/profile.d/motd.sh
 sudo chmod +x /etc/profile.d/motd.sh
+
+# zsh does not read /etc/profile.d: hook the MOTD into its login startup.
+ZSH_PROFILE=/etc/zsh/zprofile
+if [ -f "$ZSH_PROFILE" ] && ! grep -q 'aibox MOTD' "$ZSH_PROFILE"; then
+    print_info "Hooking the MOTD into $ZSH_PROFILE (zsh)"
+    printf '\n# aibox MOTD (zsh does not read /etc/profile.d)\n[ -r /etc/profile.d/motd.sh ] && . /etc/profile.d/motd.sh\n' \
+        | sudo tee -a "$ZSH_PROFILE" > /dev/null
+fi
 
 print_success "AIBOX MOTD configured!"
