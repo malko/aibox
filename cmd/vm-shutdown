@@ -26,7 +26,7 @@ else
 
     echo "Waiting for VM to shutdown..."
     for i in {1..30}; do
-        STATE=$(virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null || echo "unknown")
+        STATE=$(LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null || echo "unknown")
         if [[ "$STATE" == "shut off" ]]; then
             echo "VM '$VM_NAME' is now shut off."
             exit 0

@@ -12,7 +12,7 @@ VM_NAME="${1:-$(get_config "VM_NAME" "aibox")}"
 MAX_WAIT="${2:-30}"
 LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 
-VM_STATE=$(virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null || echo "unknown")
+VM_STATE=$(LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null || echo "unknown")
 
 NEEDS_BOOT=false
 

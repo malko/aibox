@@ -16,7 +16,7 @@ ACTION="${1:-}"
 SNAPSHOT_NAME="${2:-}"
 
 vm_state() {
-    virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null || echo "unknown"
+    LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null || echo "unknown"
 }
 
 case "$ACTION" in
