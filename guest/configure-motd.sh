@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/shared-funcs.sh"
 
-print_info "=== Configure MOTD ==="
+print_info "=== Install AIBOX MOTD ==="
 
 cat > /tmp/motd.sh << 'MOTDEND'
 #!/bin/sh

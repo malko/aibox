@@ -3,7 +3,7 @@
 step_motd() {
     setup_ensure_guest_reachable
 
-    CONFIGURE_MOTD=$(prompt_config_yes_no "CONFIGURE_MOTD" "Set AIBOX logo as MOTD?" "yes")
+    CONFIGURE_MOTD=$(prompt_config_yes_no "CONFIGURE_MOTD" "Install the AIBOX MOTD (banner + service URLs + updates)?" "yes")
     save_config "CONFIGURE_MOTD" "$CONFIGURE_MOTD"
 
     if [[ "$CONFIGURE_MOTD" != "yes" ]]; then
