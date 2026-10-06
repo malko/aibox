@@ -54,17 +54,61 @@ duration_to_seconds() {
     esac
 }
 
+# The dsh-web URL embeds an authentication token that dsh generates at
+# startup and only keeps in the journal (like the MOTD). Fetch it from the
+# guest once, best effort.
+DSH_GUEST_URL=""
+DSH_GUEST_URL_LOADED=false
+
+guest_dsh_url() {
+    if [[ "$DSH_GUEST_URL_LOADED" == "true" ]]; then
+        printf '%s' "$DSH_GUEST_URL"
+        return 0
+    fi
+    DSH_GUEST_URL_LOADED=true
+
+    [[ "$(vm_state "$VM_NAME")" == "running" ]] || return 0
+
+    local ip
+    ip=$(vm_ip "$VM_NAME")
+    [[ -n "$ip" ]] || return 0
+
+    DSH_GUEST_URL=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$GUEST_USER@$ip" \
+        'journalctl --user -u dsh-web.service -n 500 --no-pager -o cat 2>/dev/null | tr -d "\033" | grep -oE "https?://[^[:space:]\"]+" | tail -n 1' 2>/dev/null || true)
+    printf '%s' "$DSH_GUEST_URL"
+}
+
+# guest_dsh_suffix <guest_port>: path and query of the dsh-web URL when it
+# listens on that guest port (e.g. "/?token=..."), empty otherwise.
+guest_dsh_suffix() {
+    local url
+    url=$(guest_dsh_url)
+    [[ -n "$url" ]] || return 0
+
+    local url_port
+    url_port=$(printf '%s' "$url" | sed -E 's#^https?://[^:/]+:([0-9]+).*#\1#')
+    [[ "$url_port" == "$1" ]] || return 0
+
+    printf '%s' "$url" | sed -E 's#^https?://[^/]+##'
+}
+
 service_urls() {
     local bind_mode="$1"
+    local show_tokens="${2:-}"
     [[ -f "$SERVICES_FILE" ]] || return 0
-    local name port host
+    local name port host guest suffix
     while IFS=$'\t' read -r name port; do
         [[ -z "$name" || -z "$port" ]] && continue
         host="${port%%:*}"
-        if [[ "$bind_mode" == "lan" ]]; then
-            printf '  %-14s http://%s:%s  (LAN)\n' "$name" "$(host_local_name)" "$host"
+        guest="${port#*:}"
+        suffix=""
+        if [[ "$show_tokens" == "tokens" ]]; then
+            suffix=$(guest_dsh_suffix "$guest")
         fi
-        printf '  %-14s http://localhost:%s\n' "$name" "$host"
+        if [[ "$bind_mode" == "lan" ]]; then
+            printf '  %-14s http://%s:%s%s  (LAN)\n' "$name" "$(host_local_name)" "$host" "$suffix"
+        fi
+        printf '  %-14s http://localhost:%s%s\n' "$name" "$host" "$suffix"
     done < <(jq -r 'to_entries[] | "\(.key)\t\(.value)"' "$SERVICES_FILE" 2>/dev/null || true)
 }
 
@@ -291,7 +335,7 @@ case "$ACTION" in
         fi
 
         echo "  Services:"
-        service_urls "$bind_mode"
+        service_urls "$bind_mode" tokens
         ;;
 
     lan)
