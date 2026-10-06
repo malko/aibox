@@ -6,6 +6,11 @@ source "$SCRIPT_DIR/shared-funcs.sh"
 
 print_info "=== Install AIBOX MOTD ==="
 
+# Render the banner now (setup time), not at every login: the MOTD file simply
+# prints the precomputed strings below.
+AIBOX_LOGO_TC=$(aibox_banner_render 24)
+AIBOX_LOGO_256=$(aibox_banner_render 256)
+
 cat > /tmp/motd.sh << 'MOTDEND'
 #!/bin/sh
 # AIBOX MOTD: static banner + dynamic web service URLs.
@@ -23,14 +28,12 @@ DIM='\033[0;90m'
 NC='\033[0m'
 
 printf "\n"
-printf "%b\n" "${CYAN}       d8888 d8b 888888b.                    ${NC}"
-printf "%b\n" "${CYAN}      d88888 Y8P 888  °88b                   ${NC}"
-printf "%b\n" "${CYAN}     d88P888     888  .88P                   ${NC}"
-printf "%b\n" "${CYAN}    d88P 888 888 8888888K.   .d88b.  888  888${NC}"
-printf "%b\n" "${CYAN}   d88P  888 888 888  ¨Y88b d88°°88b ¨Y8bd8P¨${NC}"
-printf "%b\n" "${CYAN}  d88P   888 888 888    888 888  888   X88K  ${NC}"
-printf "%b\n" "${CYAN} d8888888888 888 888   d88P Y88..88P .d8¨¨8b.${NC}"
-printf "%b\n" "${CYAN}d88P     888 888 8888888P°   °Y88P°  888  888${NC}"
+AIBOX_LOGO_TC='@AIBOX_LOGO_TC@'
+AIBOX_LOGO_256='@AIBOX_LOGO_256@'
+case "${COLORTERM:-}${TERM:-}" in
+    *truecolor*|*24bit*|*direct*) printf '%s' "$AIBOX_LOGO_TC" ;;
+    *) printf '%s' "$AIBOX_LOGO_256" ;;
+esac
 printf "\n"
 
 # systemctl --user and journalctl --user are required to inspect the services.
@@ -120,6 +123,12 @@ if [ -f "$UPDATES_CACHE" ]; then
     fi
 fi
 MOTDEND
+
+# Inject the precomputed banners (kept out of the quoted heredoc above).
+MOTD_CONTENT=$(cat /tmp/motd.sh)
+MOTD_CONTENT=${MOTD_CONTENT//@AIBOX_LOGO_TC@/$AIBOX_LOGO_TC}
+MOTD_CONTENT=${MOTD_CONTENT//@AIBOX_LOGO_256@/$AIBOX_LOGO_256}
+printf '%s\n' "$MOTD_CONTENT" > /tmp/motd.sh
 
 sudo cp /tmp/motd.sh /etc/profile.d/motd.sh
 sudo chmod +x /etc/profile.d/motd.sh

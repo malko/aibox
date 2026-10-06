@@ -1,20 +1,87 @@
 #!/bin/bash
 
+# xterm-256 colour index closest to an RGB triple (6x6x6 cube).
+_aibox_rgb256() {
+    printf '%s' $(( 16 + 36*((($1)*5+127)/255) + 6*((($2)*5+127)/255) + ((($3)*5+127)/255) ))
+}
+
+# aibox_banner_render [24|256]
+#   "AIBox" wordmark (ANSI Shadow, A/I/B uppercase + x-height o/x) in a frame.
+#   Wordmark gradient is left -> right cyan/green -> orange (K2r); the frame
+#   uses the K2 colour #C2410C; tagline is dim grey. 24 = truecolor.
+aibox_banner_render() {
+    local mode="${1:-24}"
+    local esc=$'\033' reset="${esc}[0m"
+    local border dim
+
+    if [ "$mode" = "256" ]; then
+        border="${esc}[38;5;$(_aibox_rgb256 194 65 12)m"
+        dim="${esc}[2;38;5;$(_aibox_rgb256 148 163 184)m"
+    else
+        border="${esc}[38;2;194;65;12m"
+        dim="${esc}[2;38;2;148;163;184m"
+    fi
+
+    local -a art=(
+        " █████╗ ██╗██████╗"
+        "██╔══██╗██║██╔══██╗"
+        "███████║██║██████╔╝ ██████╗ ██╗  ██╗"
+        "██╔══██║██║██╔══██╗██╔═══██╗╚██╗██╔╝"
+        "██║  ██║██║██████╔╝╚██████╔╝██╔╝╚██╗"
+        "╚═╝  ╚═╝╚═╝╚═════╝  ╚═════╝ ╚═╝  ╚═╝"
+    )
+
+    # Without a UTF-8 locale bash counts bytes and would split the glyphs.
+    case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+        *UTF-8*|*utf-8*|*utf8*|*UTF8*) ;;
+        *)
+            local l
+            for l in "${art[@]}"; do printf '%s\n' "$l"; done
+            printf '  your AI, in its own box\n'
+            return 0
+            ;;
+    esac
+
+    local w=38 i ch line out k r g b sr sg sb er eg eb t top=""
+    for ((k=0;k<w;k++)); do top+="─"; done
+
+    printf '%s╭%s╮%s\n' "$border" "$top" "$reset"
+    for line in "${art[@]}"; do
+        while [ "${#line}" -lt 36 ]; do line+=" "; done
+        out=""
+        for ((i=0;i<36;i++)); do
+            ch=${line:i:1}
+            if [ "$i" -lt 12 ]; then
+                t=$i;          sr=34;  sg=211; sb=238; er=74;  eg=222; eb=128
+            elif [ "$i" -lt 24 ]; then
+                t=$((i-12));   sr=74;  sg=222; sb=128; er=251; eg=191; eb=36
+            else
+                t=$((i-24));   sr=251; sg=191; sb=36;  er=249; eg=115; eb=22
+            fi
+            r=$(( sr + (er-sr)*t/11 ))
+            g=$(( sg + (eg-sg)*t/11 ))
+            b=$(( sb + (eb-sb)*t/11 ))
+            if [ "$mode" = "256" ]; then
+                out="${out}${esc}[1;38;5;$(_aibox_rgb256 "$r" "$g" "$b")m${ch}"
+            else
+                out="${out}${esc}[1;38;2;${r};${g};${b}m${ch}"
+            fi
+        done
+        printf '%s│%s %s %s│%s\n' "$border" "$reset" "$out" "$border" "$reset"
+    done
+
+    local tag=" your AI, in its own box" spaces=""
+    for ((k=${#tag};k<w;k++)); do spaces+=" "; done
+    printf '%s│%s%s%s%s%s│%s\n' "$border" "$reset" "$dim" "$tag$spaces" "$reset" "$border" "$reset"
+    printf '%s╰%s╯%s\n' "$border" "$top" "$reset"
+}
+
 print_ascii_logo() {
-    local CYAN='\033[0;36m'
-    local NC='\033[0m'
-    echo -e "${CYAN}"
-    cat << 'EOF'
-       d8888 d8b 888888b.                    
-      d88888 Y8P 888  °88b                   
-     d88P888     888  .88P                   
-    d88P 888 888 8888888K.   .d88b.  888  888
-   d88P  888 888 888  ¨Y88b d88°°88b ¨Y8bd8P¨
-  d88P   888 888 888    888 888  888   X88K  
- d8888888888 888 888   d88P Y88..88P .d8¨¨8b.
-d88P     888 888 8888888P°   °Y88P°  888  888
-EOF
-    echo -e "${NC}"
+    local mode=256
+    case "${COLORTERM:-}${TERM:-}" in
+        *truecolor*|*24bit*|*direct*) mode=24 ;;
+    esac
+    aibox_banner_render "$mode"
 }
 
 print_info() { echo -e "\033[0;34mℹ️  $1\033[0m"; }
