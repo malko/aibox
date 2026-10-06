@@ -23,6 +23,7 @@ usage() {
     echo "  start                             Start the VM and the tunnel service"
     echo "  status                            VM state, service URLs and tunnel state"
     echo "  tunnel <command>                  Manage the tunnel service (see 'aibox tunnel help')"
+    echo "  vscode [dir]                      Open the local VS Code on the VM (Remote-SSH)"
     echo "  service-add <name> <port[:port]>  Add a service"
     echo "  service-remove <name>             Remove a service"
     echo "  service-list                      List configured services"
@@ -84,6 +85,7 @@ commands=(
   'start:start VM and tunnel'
   'status:show VM, URLs and tunnel state'
   'tunnel:manage the tunnel service'
+  'vscode:open the local VS Code on the VM (Remote-SSH)'
   'service-add:add a service'
   'service-remove:remove a service'
   'service-list:list configured services'
@@ -145,7 +147,7 @@ _aibox() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="start status tunnel service-add service-remove service-list setup update check-updates self-update shutdown restart snapshot"
+    opts="start status tunnel vscode service-add service-remove service-list setup update check-updates self-update shutdown restart snapshot"
 
     case "${prev}" in
         aibox)
@@ -157,6 +159,10 @@ _aibox() {
             ;;
         tunnel)
             COMPREPLY=($(compgen -W "start stop restart status logs install uninstall lan" -- "${cur}"))
+            return 0
+            ;;
+        vscode)
+            COMPREPLY=($(compgen -d -- "${cur}"))
             return 0
             ;;
         setup)
@@ -294,6 +300,10 @@ case "$1" in
         ;;
     tunnel)
         "$CMD_DIR/tunnel" "${@:2}"
+        exit $?
+        ;;
+    vscode)
+        "$CMD_DIR/vscode" "${@:2}"
         exit $?
         ;;
     service-add)

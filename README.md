@@ -134,6 +134,32 @@ repository credentials inside the VM.
 ./aibox tunnel logs                   # Last tunnel logs
 ```
 
+### VS Code (Remote-SSH)
+
+Use your local VS Code on the VM over SSH, without keeping a session open:
+
+```bash
+./aibox vscode                 # Open the shared ~/git directory in the VM
+./aibox vscode ~/git/aibox     # Open a specific directory from the share
+```
+
+`aibox vscode` resolves the VM address on the fly and runs
+`code --remote ssh-remote+<user>@<ip> <dir>`, so nothing is written to
+`~/.ssh/config`. Requirements on the host: the `code` CLI (VS Code:
+"Shell Command: Install 'code' command in PATH") and the **Remote - SSH**
+extension. The VS Code Server is installed automatically inside the VM on
+first connection.
+
+Notes:
+- Only directories under the shared host directory (`HOST_SHARE_DIR`, default
+  `~/git`) are mapped automatically. For any other path, aibox shows an error
+  and asks for the target path inside the VM (or lets you quit). The typed path
+  may be absolute (`/var/log`), start with `~` (`~/git/repo`) or be relative to
+  the shared directory (`repo`).
+- The host key is accepted automatically (no fingerprint prompt).
+- On macOS/Lima the Reachable address is the Lima instance (`lima-<name>`);
+  add `Include ~/.lima/*/ssh.config` to `~/.ssh/config` once.
+
 ### Service Management
 
 ```bash

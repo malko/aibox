@@ -1,0 +1,84 @@
+#!/bin/bash
+# aibox vscode [directory]
+#
+# Open the local VS Code on a directory inside the VM over SSH (Remote-SSH).
+# The VM IP is resolved on the fly, so nothing has to be kept in ~/.ssh/config.
+
+set -e
+
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_SOURCE" ]]; do
+    SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
+CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
+source "$SCRIPT_DIR/shared-funcs.sh"
+source "$SCRIPT_DIR/config-funcs.sh"
+init_config_file
+source "$SCRIPT_DIR/host/vm.sh"
+
+VM_NAME=$(get_config "VM_NAME" "aibox")
+GUEST_USER=$(get_config "GUEST_USER" "aibox")
+
+if ! command -v code &>/dev/null; then
+    print_error "The 'code' CLI was not found."
+    print_info "In VS Code, run: 'Shell Command: Install code command in PATH'."
+    print_info "The 'Remote - SSH' extension must also be installed."
+    exit 1
+fi
+
+# Target directory: argument or current directory, made absolute.
+DIR="${1:-$PWD}"
+[[ "$DIR" == /* ]] || DIR="$PWD/$DIR"
+
+# Host directory shared with the VM (virtiofs), and its guest mount point.
+HOST_SHARE_DIR=$(get_config "HOST_SHARE_DIR" "$HOME/git")
+
+if is_macos && command -v limactl &>/dev/null; then
+    AUTHORITY="lima-$VM_NAME"
+    GUEST_HOME="/home/${GUEST_USER}.linux"
+    GUEST_SHARE="$GUEST_HOME/git"
+else
+    if [[ "$(vm_state "$VM_NAME")" != "running" ]]; then
+        print_error "VM '$VM_NAME' is not running. Start it with 'aibox start'."
+        exit 1
+    fi
+    GUEST_IP=$(vm_ip "$VM_NAME")
+    if [[ -z "$GUEST_IP" ]]; then
+        print_error "Could not detect the guest IP."
+        exit 1
+    fi
+    # Seed the host key so Remote-SSH does not prompt for the fingerprint.
+    ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=5 \
+        "$GUEST_USER@$GUEST_IP" true &>/dev/null || true
+    AUTHORITY="$GUEST_USER@$GUEST_IP"
+    GUEST_HOME="/home/$GUEST_USER"
+    GUEST_SHARE="$GUEST_HOME/git"
+fi
+
+# Map the requested directory into the guest when it lives in the shared dir.
+if [[ "$DIR/" == "$HOST_SHARE_DIR/"* ]]; then
+    REL="${DIR#"$HOST_SHARE_DIR"/}"
+    GUEST_DIR="$GUEST_SHARE/$REL"
+else
+    print_error "'$DIR' is not inside the shared directory '$HOST_SHARE_DIR'."
+    print_info "Only paths under '$HOST_SHARE_DIR' are shared (mounted at '$GUEST_SHARE' in the VM)."
+    if [[ ! -t 0 ]]; then
+        print_info "Run interactively to enter a target path, or pass a shared directory."
+        exit 1
+    fi
+    GUEST_DIR=$(prompt "Guest path in the VM to open (empty to quit)" "")
+    if [[ -z "$GUEST_DIR" ]]; then
+        print_info "Cancelled."
+        exit 0
+    fi
+    case "$GUEST_DIR" in
+        "~")   GUEST_DIR="$GUEST_HOME" ;;
+        "~/"*) GUEST_DIR="$GUEST_HOME/${GUEST_DIR#\~/}" ;;
+        /*)    ;;
+        *)     GUEST_DIR="$GUEST_SHARE/$GUEST_DIR" ;;
+    esac
+fi
+
+print_info "Opening VS Code on $AUTHORITY:$GUEST_DIR"
+exec code --remote "ssh-remote+$AUTHORITY" "$GUEST_DIR/"
