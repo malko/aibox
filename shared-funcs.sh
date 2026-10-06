@@ -11,7 +11,9 @@ _aibox_rgb256() {
 #   uses the K2 colour #C2410C; tagline is dim grey. 24 = truecolor.
 aibox_banner_render() {
     local mode="${1:-24}"
-    local esc=$'\033' reset="${esc}[0m"
+    local esc reset
+    esc=$'\033'
+    reset="${esc}[0m"
     local border dim
 
     if [ "$mode" = "256" ]; then
