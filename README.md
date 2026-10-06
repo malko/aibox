@@ -120,6 +120,25 @@ repository credentials inside the VM.
 ./aibox restart               # Restart VM (tunnel reconnects automatically)
 ```
 
+### Run a command in the VM
+
+`aibox exec` runs a command inside the VM over SSH and returns its exit code.
+It is meant for scripting: stdout/stderr/stdin pass through unchanged and
+nothing else is printed, so it composes well in pipelines.
+
+```bash
+./aibox exec uname -a                       # run a command
+./aibox exec echo "hello world"             # arguments keep their boundaries
+./aibox exec bash -lc 'cd ~/git/repo && make'  # shell features via a shell
+printf 'data' | ./aibox exec cat            # stdin is forwarded
+./aibox exec -t htop                         # allocate a TTY for interactive tools
+
+if ./aibox exec test -f /etc/os-release; then ...   # exit code propagates
+```
+
+The VM must be running (start it with `./aibox start`); otherwise `exec` fails
+immediately with a non-zero status.
+
 ### Tunnel management
 
 ```bash

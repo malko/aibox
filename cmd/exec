@@ -1,0 +1,86 @@
+#!/bin/bash
+# aibox exec [-t|-T] [--] command [args...]
+#
+# Run a command inside the VM over SSH and return its exit code. Built for
+# scripting: stdout/stderr/stdin are forwarded untouched and no banner or
+# progress line is printed.
+#
+# Arguments keep their boundaries (like 'docker exec'): shell features must go
+# through a shell, e.g. 'aibox exec bash -lc "cd ~/git/repo && make"'.
+
+set -e
+
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_SOURCE" ]]; do
+    SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
+CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
+source "$SCRIPT_DIR/shared-funcs.sh"
+source "$SCRIPT_DIR/config-funcs.sh"
+init_config_file
+source "$SCRIPT_DIR/host/vm.sh"
+
+VM_NAME=$(get_config "VM_NAME" "aibox")
+GUEST_USER=$(get_config "GUEST_USER" "aibox")
+
+usage_exec() {
+    echo "Usage: aibox exec [-t|-T] [--] command [args...]"
+    echo ""
+    echo "Run a command inside the VM and return its exit code."
+    echo ""
+    echo "Options:"
+    echo "  -t, --tty     Allocate a pseudo-TTY (interactive commands)"
+    echo "  -T, --no-tty  Do not allocate a pseudo-TTY (default)"
+    echo "  -h, --help    Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  aibox exec uname -a"
+    echo "  aibox exec echo \"hello world\"            # one argument, kept intact"
+    echo "  aibox exec bash -lc 'cd ~/git/repo && make'"
+    echo "  printf 'data' | aibox exec cat"
+}
+
+# Quote one argument for the remote (login) shell.
+shell_quote() {
+    printf "'%s'" "${1//\'/\'\\\'\'}"
+}
+
+TTY=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -t|--tty)    TTY=1; shift ;;
+        -T|--no-tty) TTY=0; shift ;;
+        -h|--help)   usage_exec; exit 0 ;;
+        --)          shift; break ;;
+        -*)          print_error "Unknown option: $1"; usage_exec >&2; exit 2 ;;
+        *)           break ;;
+    esac
+done
+
+if [[ $# -eq 0 ]]; then
+    usage_exec >&2
+    exit 1
+fi
+
+# Build the remote command, preserving each argument's boundaries.
+REMOTE_CMD=""
+for arg in "$@"; do
+    REMOTE_CMD+="$(shell_quote "$arg") "
+done
+
+if [[ "$(vm_state "$VM_NAME")" != "running" ]]; then
+    print_error "VM '$VM_NAME' is not running. Start it with 'aibox start'."
+    exit 1
+fi
+
+vm_resolve "$VM_NAME"
+if [[ "$VM_SSH_TARGET" == *@ ]]; then
+    print_error "Could not detect the guest IP."
+    exit 1
+fi
+
+SSH_OPTS=(-o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new)
+[[ "$TTY" == "1" ]] && SSH_OPTS+=(-t)
+
+exec ssh "${VM_SSH_OPTS[@]}" "${SSH_OPTS[@]}" "$VM_SSH_TARGET" "$REMOTE_CMD"
