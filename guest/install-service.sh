@@ -2,7 +2,14 @@
 
 USER_NAME="${USER:-$(whoami)}"
 HOME_DIR="/home/$USER_NAME"
+OPENCODE_PORT="${1:-4096}"
 echo "==> User: $USER_NAME"
+echo "==> Port: $OPENCODE_PORT"
+
+if ! [[ "$OPENCODE_PORT" =~ ^[0-9]+$ ]]; then
+    echo "Error: invalid port: $OPENCODE_PORT" >&2
+    exit 1
+fi
 
 NVM_DIR="$HOME_DIR/.nvm"
 if [ -d "$NVM_DIR" ]; then
@@ -19,60 +26,62 @@ echo "==> Looking for opencode..."
 OPENCODE_PATH=$(which opencode 2>/dev/null || echo "")
 if [ -z "$OPENCODE_PATH" ]; then
     echo "Error: opencode not found in PATH"
-    echo "Make sure opencode is installed: npm install -g opencode"
+    echo "Make sure opencode is installed: npm install -g @opencode/cli"
     exit 1
 fi
 echo "==> opencode found: $OPENCODE_PATH"
 
-echo -n "Set opencode web password (user:opencode, empty for no password): "
-read -s PASSWORD
-echo ""
-
-if [ -z "$PASSWORD" ]; then
-    echo "Warning: no password set. Keep this service on localhost only;"
-    echo "         'aibox tunnel lan on' will warn before LAN exposure."
-fi
-
 WRAPPER_DIR="$HOME_DIR/.local/bin"
-WRAPPER_SCRIPT="$WRAPPER_DIR/opencode-web-runner"
+WRAPPER_SCRIPT="$WRAPPER_DIR/opencode-runner"
 echo "==> Creating wrapper at: $WRAPPER_SCRIPT"
 mkdir -p "$WRAPPER_DIR"
 
-# Wrapper contains the web password: make it owner-only before writing
-touch "$WRAPPER_SCRIPT"
-chmod 700 "$WRAPPER_SCRIPT"
-
+# opencode serve generates its own password at startup (like dsh generates a
+# token) and prints it in the journal. Unset any password-related variable so
+# opencode always creates (and prints) a fresh key on every restart.
 if [ "$NVM_SOURCED" = true ]; then
     cat > "$WRAPPER_SCRIPT" << EOFWRAPPER
 #!/bin/bash
 export NVM_DIR="\$HOME/.nvm"
-export OPENCODE_SERVER_PASSWORD="$PASSWORD"
 [ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
-exec opencode web --hostname 127.0.0.1
+unset OPENCODE_PASSWORD OPENCODE_SERVER_PASSWORD
+exec opencode serve --hostname 127.0.0.1 --port $OPENCODE_PORT
 EOFWRAPPER
     echo "==> Wrapper created with NVM support"
 else
     cat > "$WRAPPER_SCRIPT" << EOFWRAPPER
 #!/bin/bash
-export OPENCODE_SERVER_PASSWORD="$PASSWORD"
-exec opencode web --hostname 127.0.0.1
+unset OPENCODE_PASSWORD OPENCODE_SERVER_PASSWORD
+exec opencode serve --hostname 127.0.0.1 --port $OPENCODE_PORT
 EOFWRAPPER
     echo "==> Wrapper created without NVM"
 fi
+chmod 755 "$WRAPPER_SCRIPT"
 
 SERVICE_DIR="$HOME_DIR/.config/systemd/user"
-SERVICE_FILE="$SERVICE_DIR/opencode-web.service"
+SERVICE_FILE="$SERVICE_DIR/opencode.service"
 echo "==> Service file: $SERVICE_FILE"
 mkdir -p "$SERVICE_DIR"
 mkdir -p "$HOME_DIR/git/opencode"
+
+# v2 only: stop and drop the legacy opencode-web unit/wrapper so it does not
+# keep running (and holding the port) alongside the new service.
+LEGACY_REMOVED=false
+if [ -f "$SERVICE_DIR/opencode-web.service" ]; then
+    echo "==> Removing legacy opencode-web.service..."
+    systemctl --user disable --now opencode-web.service 2>/dev/null || true
+    rm -f "$SERVICE_DIR/opencode-web.service" "$WRAPPER_DIR/opencode-web-runner"
+    LEGACY_REMOVED=true
+fi
+
 NEW_CONTENT=$(cat << 'EOF'
 [Unit]
-Description=OpenCode Web Service
+Description=OpenCode Server
 
 [Service]
 Type=simple
 Environment="OPENCODE_CONFIG_DIR=%h/git/opencode/"
-ExecStart=%h/.local/bin/opencode-web-runner
+ExecStart=%h/.local/bin/opencode-runner
 Restart=always
 RestartSec=5
 
@@ -95,16 +104,16 @@ else
     NEEDS_RELOAD=false
 fi
 
-if [ "$NEEDS_RELOAD" = true ]; then
+if [ "$NEEDS_RELOAD" = true ] || [ "$LEGACY_REMOVED" = true ]; then
     echo "==> Reloading systemd..."
     systemctl --user daemon-reload
 fi
 
 echo "==> Enabling service..."
-systemctl --user enable opencode-web.service
+systemctl --user enable opencode.service
 
 echo "==> Starting service..."
-systemctl --user restart opencode-web.service
+systemctl --user restart opencode.service
 
 echo "==> Checking linger..."
 if loginctl show-user "$USER_NAME" 2>/dev/null | grep -q "Linger=yes"; then
@@ -114,7 +123,31 @@ else
     sudo loginctl enable-linger "$USER_NAME"
 fi
 
+# Show the connection details opencode printed at startup. The password is
+# regenerated on each restart, so read the current value from the journal.
+OPENCODE_URL=""
+OPENCODE_PASSWORD=""
+SINCE=$(systemctl --user show -p ActiveEnterTimestamp --value opencode.service 2>/dev/null)
+for _ in $(seq 1 10); do
+    if [ -n "$SINCE" ]; then
+        OPENCODE_LOG=$(journalctl --user -u opencode.service --since "$SINCE" --no-pager -o cat 2>/dev/null | tr -d '\033')
+    else
+        OPENCODE_LOG=$(journalctl --user -u opencode.service -n 500 --no-pager -o cat 2>/dev/null | tr -d '\033')
+    fi
+    OPENCODE_URL=$(printf '%s\n' "$OPENCODE_LOG" | grep -oE 'https?://[^[:space:]"]+' | tail -n 1)
+    OPENCODE_PASSWORD=$(printf '%s\n' "$OPENCODE_LOG" | sed -nE 's/.*server password ([^[:space:]]+).*/\1/p' | tail -n 1)
+    [ -n "$OPENCODE_URL" ] && [ -n "$OPENCODE_PASSWORD" ] && break
+    sleep 1
+done
+
 echo ""
 echo "=== Done ==="
-echo "Status: systemctl --user status opencode-web.service"
-echo "Logs:   journalctl --user -u opencode-web.service -f"
+if [ -n "$OPENCODE_URL" ]; then
+    echo "URL:      $OPENCODE_URL"
+fi
+if [ -n "$OPENCODE_PASSWORD" ]; then
+    echo "User:     opencode"
+    echo "Password: $OPENCODE_PASSWORD"
+fi
+echo "Status:   systemctl --user status opencode.service"
+echo "Logs:     journalctl --user -u opencode.service -f"

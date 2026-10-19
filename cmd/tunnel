@@ -80,6 +80,33 @@ guest_dsh_url() {
     printf '%s' "$DSH_GUEST_URL"
 }
 
+# opencode serve generates its own password at startup (like dsh generates a
+# token) and only prints it in the journal. Fetch it from the guest once.
+OPENCODE_GUEST_PASSWORD=""
+OPENCODE_GUEST_PASSWORD_LOADED=false
+
+guest_opencode_password() {
+    if [[ "$OPENCODE_GUEST_PASSWORD_LOADED" == "true" ]]; then
+        printf '%s' "$OPENCODE_GUEST_PASSWORD"
+        return 0
+    fi
+    OPENCODE_GUEST_PASSWORD_LOADED=true
+
+    [[ "$(vm_state "$VM_NAME")" == "running" ]] || return 0
+
+    local ip
+    ip=$(vm_ip "$VM_NAME")
+    [[ -n "$ip" ]] || return 0
+
+    # Read the journal since the last service start so the key is found even
+    # after a long run; fall back to the last 500 lines.
+    # -n: never read stdin, or ssh would swallow the remaining lines of the
+    # service list read by service_urls' while loop.
+    OPENCODE_GUEST_PASSWORD=$(ssh -n -o BatchMode=yes -o ConnectTimeout=5 "$GUEST_USER@$ip" \
+        'since=$(systemctl --user show -p ActiveEnterTimestamp --value opencode.service 2>/dev/null); if [ -n "$since" ]; then journalctl --user -u opencode.service --since "$since" --no-pager -o cat; else journalctl --user -u opencode.service -n 500 --no-pager -o cat; fi 2>/dev/null | tr -d "\033" | sed -nE "s/.*server password ([^[:space:]]+).*/\1/p" | tail -n 1' 2>/dev/null || true)
+    printf '%s' "$OPENCODE_GUEST_PASSWORD"
+}
+
 # guest_dsh_suffix <guest_port>: path and query of the dsh-web URL when it
 # listens on that guest port (e.g. "/?token=..."), empty otherwise.
 guest_dsh_suffix() {
@@ -98,19 +125,25 @@ service_urls() {
     local bind_mode="$1"
     local show_tokens="${2:-}"
     [[ -f "$SERVICES_FILE" ]] || return 0
-    local name port host guest suffix
+    local name port host guest suffix auth
     while IFS=$'\t' read -r name port; do
         [[ -z "$name" || -z "$port" ]] && continue
         host="${port%%:*}"
         guest="${port#*:}"
         suffix=""
+        auth=""
         if [[ "$show_tokens" == "tokens" ]]; then
             suffix=$(guest_dsh_suffix "$guest")
+            if [[ "$name" == "opencode" ]]; then
+                local password
+                password=$(guest_opencode_password)
+                [[ -n "$password" ]] && auth="  (password: $password)"
+            fi
         fi
         if [[ "$bind_mode" == "lan" ]]; then
-            printf '  %-14s http://%s:%s%s  (LAN)\n' "$name" "$(host_local_name)" "$host" "$suffix"
+            printf '  %-14s http://%s:%s%s%s  (LAN)\n' "$name" "$(host_local_name)" "$host" "$suffix" "$auth"
         fi
-        printf '  %-14s http://localhost:%s%s\n' "$name" "$host" "$suffix"
+        printf '  %-14s http://localhost:%s%s%s\n' "$name" "$host" "$suffix" "$auth"
     done < <(jq -r 'to_entries[] | "\(.key)\t\(.value)"' "$SERVICES_FILE" 2>/dev/null || true)
 }
 
@@ -165,13 +198,13 @@ lan_security_warnings() {
     local warnings=0
 
     if ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" \
-        "systemctl --user is-enabled opencode-web.service" &>/dev/null; then
-        if ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" \
-            "grep -q 'OPENCODE_SERVER_PASSWORD=\"\"' ~/.local/bin/opencode-web-runner"; then
-            print_warn "opencode-web has no password: exposing it on the LAN is unsafe."
-            warnings=1
+        "systemctl --user is-active --quiet opencode.service" &>/dev/null; then
+        # opencode v2 always generates a server password at startup.
+        if [[ -n "$(guest_opencode_password)" ]]; then
+            print_info "opencode: password protected."
         else
-            print_info "opencode-web: password protected."
+            print_warn "opencode: no server password detected; LAN exposure is unsafe."
+            warnings=1
         fi
     fi
 

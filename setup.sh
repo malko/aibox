@@ -113,8 +113,9 @@ echo ""
 print_info "VM state, service URLs and tunnel state:"
 echo "  aibox status"
 echo ""
-print_info "opencode web interface:"
+print_info "opencode web interface (password is generated on startup):"
 echo "  http://localhost:$(get_config "OPENCODE_PORT" "4096")"
+echo "  Connection password: see the VM MOTD or run 'aibox status'"
 
 if [[ "$(get_config "INSTALL_DSH" "no")" == "yes" ]]; then
     echo ""

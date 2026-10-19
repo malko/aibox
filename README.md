@@ -11,7 +11,8 @@ Scripts for managing an AI development virtual machine with reverse proxy and se
 # Connect to VM (automatically forwards configured services)
 ./aibox
 
-# Access opencode-web at http://localhost:4096
+# Access opencode at http://localhost:4096
+# (connection password: see the VM MOTD or run ./aibox status)
 ```
 
 ## Requirements
@@ -76,9 +77,10 @@ open) while you are not using the VM.
 
 `aibox tunnel lan on` rebinds the tunnels on `0.0.0.0`, making the services
 reachable from the LAN at `http://<hostname>.local:<port>`. Before exposing,
-aibox checks the guest for unauthenticated services and warns (opencode-web
-without a password, vscode-server without password auth). dsh-web connection
-URLs embed an authentication token, so no warning is needed.
+aibox checks the guest for unauthenticated services and warns (vscode-server
+without password auth). opencode generates its own server password at startup
+and dsh-web connection URLs embed an authentication token, so no warning is
+needed for them.
 
 The exposure is time-limited: it reverts to localhost after
 `TUNNEL_LAN_TIMEOUT` (default `2h`). `--timeout 30m` overrides it,
@@ -224,7 +226,7 @@ Note: Snapshots are internal (embedded in qcow2 file). VM must be shut off to cr
 ./aibox update scripts            # Upload the latest scripts to the VM
 ./aibox update os                 # apt update + dist-upgrade (interactive)
 ./aibox update os -y              # Same, non-interactive
-./aibox update opencode           # Update opencode + restart opencode-web
+./aibox update opencode           # Update opencode (opencode update) + restart server
 ./aibox update dsh                # Update dsh + restart dsh-web
 ./aibox update claude             # Update Claude Code
 ./aibox update vscode-server      # Pull and restart vscode-server
@@ -233,8 +235,8 @@ Note: Snapshots are internal (embedded in qcow2 file). VM must be shut off to cr
 ./aibox self-update               # Pull the aibox repo and push scripts to the VM
 ```
 
-`all` stops at the first failure. `opencode-password` is excluded (it is an
-interactive config action).
+`all` stops at the first failure. `opencode-service` is excluded (it only
+reinstalls the opencode service).
 
 ## Setup Process
 
@@ -292,6 +294,9 @@ TUNNEL_WAIT="120"            # seconds the tunnel waits for the VM
 
 Edit `~/.config/opencode/opencode.json` in the VM to configure AI providers.
 
+`opencode serve` generates its own connection password at startup (it changes
+on every restart). The VM MOTD and `aibox status` display the current one.
+
 ## File Structure
 
 ```
@@ -326,7 +331,7 @@ aibox/
 ├── guest/                       # Guest-side scripts (uploaded to VM)
 │   ├── install-deps.sh          # Install dependencies
 │   ├── install-docker.sh        # Install Docker
-│   ├── install-service.sh       # Install opencode-web service
+│   ├── install-service.sh       # Install the opencode serve service
 │   ├── install-dsh.sh           # Install dsh CLI
 │   ├── install-dsh-service.sh   # Install dsh-web service
 │   ├── install-claude.sh        # Install Claude Code
@@ -339,8 +344,8 @@ aibox/
 
 - Services are exposed on localhost only by default; use `aibox tunnel lan on`
   (time-limited) when you really need LAN access
-- opencode-web and vscode-server should keep a password; aibox warns before
-  LAN exposure when they do not
+- opencode generates its own server password at startup; vscode-server should
+  keep a password; aibox warns before LAN exposure when they are unprotected
 - The host `~/git` share is writable by design: the agent can modify your
   working copies, so review changes and push from the host
 - Create a separate git account for your agents

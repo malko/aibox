@@ -46,26 +46,50 @@ is_service_active() {
     systemctl --user is-active --quiet "$1" 2>/dev/null
 }
 
+# service_journal <unit> -> the unit's journal since its last start.
+# Reading the whole journal of a verbose service (opencode) costs several
+# seconds at every login, so only the current run is read; the last 500 lines
+# are used as a fallback when the start timestamp is unavailable.
+service_journal() {
+    SINCE=$(systemctl --user show -p ActiveEnterTimestamp --value "$1" 2>/dev/null)
+    if [ -n "$SINCE" ]; then
+        journalctl --user -u "$1" --since "$SINCE" --no-pager -o cat 2>/dev/null
+    else
+        journalctl --user -u "$1" -n 500 --no-pager -o cat 2>/dev/null
+    fi
+}
+
 # last_url <unit> [filter] -> most recent URL found in the unit's journal.
-# Only the last 500 lines are scanned: reading the whole journal of a verbose
-# service (opencode) costs several seconds at every login.
 last_url() {
-    journalctl --user -u "$1" -n 500 --no-pager -o cat 2>/dev/null \
+    service_journal "$1" \
         | tr -d '\033' \
         | grep -E "${2:-}" \
         | grep -oE 'https?://[^[:space:]"]+' \
         | tail -n 1
 }
 
+# last_password <unit> -> most recent "server password <key>" from the journal.
+# opencode serve generates this key at startup, like dsh generates its token.
+last_password() {
+    service_journal "$1" \
+        | tr -d '\033' \
+        | sed -nE 's/.*server password ([^[:space:]]+).*/\1/p' \
+        | tail -n 1
+}
+
 SHOWN=false
 
-if is_service_active opencode-web.service; then
-    # opencode prints "Network access: http://<ip>:<port>"; fall back to any URL.
-    OPENCODE_URL=$(last_url opencode-web.service 'Network access')
-    [ -z "$OPENCODE_URL" ] && OPENCODE_URL=$(last_url opencode-web.service)
+if is_service_active opencode.service; then
+    # opencode serve prints "server listening on http://<ip>:<port>" followed by
+    # "server password <key>".
+    OPENCODE_URL=$(last_url opencode.service 'server listening')
+    OPENCODE_PASSWORD=$(last_password opencode.service)
     if [ -n "$OPENCODE_URL" ]; then
         SHOWN=true
-        printf "%b\n" "  ${GREEN}●${NC} opencode-web  ${CYAN}${OPENCODE_URL}${NC}"
+        printf "%b\n" "  ${GREEN}●${NC} opencode      ${CYAN}${OPENCODE_URL}${NC}"
+        if [ -n "$OPENCODE_PASSWORD" ]; then
+            printf "%b\n" "                  ${DIM}password:${NC} ${OPENCODE_PASSWORD}"
+        fi
     fi
 fi
 

@@ -26,9 +26,9 @@ if ! command -v node &>/dev/null; then
     nvm use 24
 fi
 
-if ! command -v opencode &>/dev/null; then
-    echo "Installing opencode..."
-    npm install -g opencode-ai
+if ! npm ls -g @opencode/cli &>/dev/null; then
+    echo "Installing opencode v2..."
+    npm install -g @opencode/cli
 fi
 
 echo "Dependencies installed!"

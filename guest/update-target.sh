@@ -11,7 +11,7 @@ fi
 
 if [[ -z "$TARGET" ]]; then
     echo "Usage: $0 <target> [options]"
-    echo "Targets: opencode, opencode-password, dsh, claude, os, vscode-server"
+    echo "Targets: opencode, opencode-service, dsh, claude, os, vscode-server"
     exit 1
 fi
 
@@ -22,18 +22,17 @@ case "$TARGET" in
             exit 0
         fi
         echo "Updating opencode..."
-        if ! command -v npm &>/dev/null; then
-            echo "Error: npm not found"
+        if ! opencode update; then
+            echo "Error: opencode update failed" >&2
             exit 1
         fi
-        npm install -g opencode-ai
-        echo "Restarting opencode-web service..."
-        systemctl --user restart opencode-web.service
+        echo "Restarting opencode server..."
+        systemctl --user restart opencode.service
         sleep 2
-        systemctl --user status opencode-web.service --no-pager
+        systemctl --user status opencode.service --no-pager
         ;;
-    opencode-password)
-        "$SCRIPTS_DIR/install-service.sh"
+    opencode-service)
+        "$SCRIPTS_DIR/install-service.sh" "$EXTRA"
         ;;
     os)
         echo "Updating system packages..."
@@ -88,7 +87,7 @@ case "$TARGET" in
         ;;
     *)
         echo "Unknown target: $TARGET"
-        echo "Available targets: opencode, opencode-password, dsh, claude, os, vscode-server"
+        echo "Available targets: opencode, opencode-service, dsh, claude, os, vscode-server"
         exit 1
         ;;
 esac
