@@ -7,30 +7,37 @@
 # configured service. A non-zero exit makes the service manager restart it; a
 # clean exit (VM still off after the wait) leaves the service inactive, so an
 # idle VM costs nothing.
+#
+# LAN exposure is decided per service: permanent services are stored in
+# services.json, temporary ones in the per-boot runtime file. Each service gets
+# its own bind address, so opencode can be on the LAN while dsh stays local.
 
 set -e
 
 CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
 source "$(dirname "$0")/../shared-funcs.sh"
 source "$(dirname "$0")/../config-funcs.sh"
+source "$(dirname "$0")/../services-funcs.sh"
 init_config_file
 source "$SCRIPT_DIR/host/vm.sh"
 
 VM_NAME=$(get_config "VM_NAME" "aibox")
 GUEST_USER=$(get_config "GUEST_USER" "aibox")
-TUNNEL_BIND=$(get_config "TUNNEL_BIND" "local")
 TUNNEL_WAIT=$(get_config "TUNNEL_WAIT" "120")
 
-# Enforce the LAN timeout even when the service is started at login (the lazy
-# check in cmd/tunnel covers interactive use).
+# Legacy global bind. It is migrated to per-service settings by cmd/tunnel, but
+# this service may start before any CLI command runs; honour it in the meantime
+# so an exposure configured before the upgrade is not lost.
+TUNNEL_BIND=$(get_config "TUNNEL_BIND" "local")
 TUNNEL_LAN_UNTIL=$(get_config "TUNNEL_LAN_UNTIL" "0")
-if [[ "$TUNNEL_BIND" == "lan" && "$TUNNEL_LAN_UNTIL" =~ ^[0-9]+$ ]] \
-    && [[ "$TUNNEL_LAN_UNTIL" -gt 0 ]] \
-    && [[ "$(date +%s)" -ge "$TUNNEL_LAN_UNTIL" ]]; then
-    TUNNEL_BIND="local"
+LEGACY_LAN=false
+if [[ "$TUNNEL_BIND" == "lan" ]]; then
+    if [[ "$TUNNEL_LAN_UNTIL" =~ ^[0-9]+$ ]] && [[ "$TUNNEL_LAN_UNTIL" -gt 0 ]]; then
+        [[ "$(date +%s)" -lt "$TUNNEL_LAN_UNTIL" ]] && LEGACY_LAN=true
+    else
+        LEGACY_LAN=true
+    fi
 fi
-
-SERVICES_FILE="${HOME}/.config/aibox/services.json"
 
 # A user service does not always inherit the shell PATH: fail loudly instead
 # of reporting "no services" and exiting cleanly (which leaves the tunnel
@@ -40,21 +47,38 @@ if ! command -v jq &>/dev/null; then
     exit 1
 fi
 
-PORTS=()
-if [[ -f "$SERVICES_FILE" ]]; then
-    while IFS= read -r port; do
-        [[ -n "$port" ]] && PORTS+=("$port")
-    done < <(jq -r 'to_entries[] | .value' "$SERVICES_FILE" 2>/dev/null || true)
-fi
+# Drop expired temporary exposures (or all of them after a reboot).
+lan_runtime_prune || true
 
-if [[ ${#PORTS[@]} -eq 0 ]]; then
+FORWARD_ARGS=()
+PORTS_DESC=()
+SERVICE_COUNT=0
+
+while IFS=$'\t' read -r name port; do
+    [[ -n "$name" && -n "$port" ]] || continue
+
+    if [[ "$port" == *:* ]]; then
+        HOST_PORT="${port%%:*}"
+        GUEST_PORT="${port#*:}"
+    else
+        HOST_PORT="$port"
+        GUEST_PORT="$port"
+    fi
+
+    MODE=$(service_effective_lan "$name")
+    BIND="127.0.0.1"
+    if [[ "$MODE" != "local" || "$LEGACY_LAN" == "true" ]]; then
+        BIND="0.0.0.0"
+    fi
+
+    FORWARD_ARGS+=(-L "$BIND:$HOST_PORT:127.0.0.1:$GUEST_PORT")
+    PORTS_DESC+=("$name=$BIND:$HOST_PORT")
+    SERVICE_COUNT=$((SERVICE_COUNT + 1))
+done < <(services_entries)
+
+if [[ "$SERVICE_COUNT" -eq 0 ]]; then
     echo "No services configured; nothing to tunnel."
     exit 0
-fi
-
-BIND="127.0.0.1"
-if [[ "$TUNNEL_BIND" == "lan" ]]; then
-    BIND="0.0.0.0"
 fi
 
 vm_running() {
@@ -84,19 +108,7 @@ if [[ -z "$GUEST_IP" ]]; then
     exit 1
 fi
 
-FORWARD_ARGS=()
-for ARG in "${PORTS[@]}"; do
-    if [[ "$ARG" == *:* ]]; then
-        HOST_PORT="${ARG%%:*}"
-        GUEST_PORT="${ARG#*:}"
-    else
-        HOST_PORT="$ARG"
-        GUEST_PORT="$ARG"
-    fi
-    FORWARD_ARGS+=(-L "$BIND:$HOST_PORT:127.0.0.1:$GUEST_PORT")
-done
-
-echo "Tunnel up on $BIND -> $GUEST_IP (${PORTS[*]})"
+echo "Tunnel up: ${PORTS_DESC[*]}"
 
 # -N: no remote command/shell (without it ssh opens a shell, prints the MOTD
 # and exits 0, leaving the service silently inactive).

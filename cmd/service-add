@@ -2,43 +2,122 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SERVICES_FILE="${HOME}/.config/aibox/services.json"
+source "$SCRIPT_DIR/services-funcs.sh"
 
-if [[ $# -lt 2 ]]; then
-    echo "Usage: $0 <service-name> <port> | <host_port:guest_port>"
-    echo "Example: $0 opencode 4096"
-    echo "         $0 portainer 8080:9000"
+usage() {
+    echo "Usage: aibox service-add <name> <port> [--lan]"
+    echo ""
+    echo "Add a service to services.json and refresh the tunnel."
+    echo ""
+    echo "Arguments:"
+    echo "  <name>          Service name (letters, digits, '.', '_', '-')"
+    echo "  <port>          Guest port, or <host_port>:<guest_port>"
+    echo ""
+    echo "Options:"
+    echo "  --lan           Expose the service on the LAN permanently"
+    echo "                  (the setting is stored in services.json and survives reboot)"
+    echo "  -y, --yes       Do not ask for confirmation for LAN exposure"
+    echo "  -h, --help      Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  aibox service-add opencode 4096"
+    echo "  aibox service-add portainer 8080:9000"
+    echo "  aibox service-add opencode 4096 --lan"
+    echo ""
+    echo "To expose an existing service permanently:"
+    echo "  aibox tunnel lan on <name> --permanent"
+}
+
+SERVICE_NAME=""
+PORT_ARG=""
+LAN_MODE="local"
+ASSUME_YES=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --lan)
+            LAN_MODE="permanent"
+            shift
+            ;;
+        -y|--yes)
+            ASSUME_YES=true
+            shift
+            ;;
+        -*)
+            echo "Error: unknown option: $1" >&2
+            usage >&2
+            exit 1
+            ;;
+        *)
+            if [[ -z "$SERVICE_NAME" ]]; then
+                SERVICE_NAME="$1"
+            elif [[ -z "$PORT_ARG" ]]; then
+                PORT_ARG="$1"
+            else
+                echo "Error: too many arguments: $1" >&2
+                usage >&2
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [[ -z "$SERVICE_NAME" || -z "$PORT_ARG" ]]; then
+    usage >&2
     exit 1
 fi
 
-SERVICE_NAME="$1"
-PORT_ARG="$2"
-
-# Parse port format
-if [[ "$PORT_ARG" == *:* ]]; then
-    HOST_PORT="${PORT_ARG%%:*}"
-    GUEST_PORT="${PORT_ARG#*:}"
-    PORT_VALUE="$HOST_PORT:$GUEST_PORT"
-else
-    PORT_VALUE="$PORT_ARG"
+if [[ ! "$SERVICE_NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "Error: invalid service name '$SERVICE_NAME'." >&2
+    echo "Use letters, digits, '.', '_' or '-'." >&2
+    exit 1
 fi
 
-mkdir -p "$(dirname "$SERVICES_FILE")"
+if [[ ! "$PORT_ARG" =~ ^[0-9]+(:[0-9]+)?$ ]]; then
+    echo "Error: invalid port '$PORT_ARG'. Expected <port> or <host_port>:<guest_port>." >&2
+    exit 1
+fi
 
-if [[ -f "$SERVICES_FILE" ]]; then
-    if grep -q "\"$SERVICE_NAME\"" "$SERVICES_FILE" 2>/dev/null; then
-        echo "Service '$SERVICE_NAME' already exists. Use service-remove first."
-        exit 1
-    fi
-    TEMP=$(mktemp)
-    jq --arg name "$SERVICE_NAME" --arg port "$PORT_VALUE" '. + {($name): $port}' "$SERVICES_FILE" > "$TEMP" && mv "$TEMP" "$SERVICES_FILE"
-else
-    echo "{\"$SERVICE_NAME\": \"$PORT_VALUE\"}" > "$SERVICES_FILE"
+if ! services_require_jq; then
+    exit 1
+fi
+
+if service_exists "$SERVICE_NAME"; then
+    echo "Service '$SERVICE_NAME' already exists. Use service-remove first."
+    exit 1
+fi
+
+PORT_VALUE="$PORT_ARG"
+
+# Add the service as localhost-only first. Permanent LAN exposure goes through
+# 'cmd/tunnel lan on' so the same authentication warnings and confirmation
+# apply as with the standalone command.
+if ! service_add_json "$SERVICE_NAME" "$PORT_VALUE" "local"; then
+    echo "Error: could not update $SERVICES_FILE." >&2
+    exit 1
 fi
 
 echo "Added service '$SERVICE_NAME' on port $PORT_VALUE"
 
-# Pick up the new port in a running tunnel.
-if [[ -x "$SCRIPT_DIR/cmd/tunnel" ]]; then
-    "$SCRIPT_DIR/cmd/tunnel" reload >/dev/null 2>&1 || true
+if [[ "$LAN_MODE" == "permanent" ]]; then
+    if [[ ! -x "$SCRIPT_DIR/cmd/tunnel" ]]; then
+        echo "Error: service was added, but cmd/tunnel was not found to enable LAN exposure." >&2
+        exit 1
+    fi
+    TUNNEL_ARGS=(lan on "$SERVICE_NAME" --permanent)
+    [[ "$ASSUME_YES" == "true" ]] && TUNNEL_ARGS+=(--yes)
+    if ! "$SCRIPT_DIR/cmd/tunnel" "${TUNNEL_ARGS[@]}"; then
+        echo "Error: service was added, but permanent LAN exposure was not enabled." >&2
+        exit 1
+    fi
+else
+    # Pick up the new port in a running tunnel.
+    if [[ -x "$SCRIPT_DIR/cmd/tunnel" ]]; then
+        "$SCRIPT_DIR/cmd/tunnel" reload >/dev/null 2>&1 || true
+    fi
 fi

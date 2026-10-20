@@ -1,6 +1,21 @@
 #!/bin/bash
 set -e
 
+usage_check_updates() {
+    echo "Usage: aibox check-updates"
+    echo ""
+    echo "Check for updates to the aibox repository and to the software installed"
+    echo "in the VM (opencode, dsh, Claude Code, vscode-server, OS packages)."
+    echo ""
+    echo "Options:"
+    echo "  -h, --help      Show this help"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage_check_updates
+    exit 0
+fi
+
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
     SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"

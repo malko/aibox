@@ -2,28 +2,70 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SERVICES_FILE="${HOME}/.config/aibox/services.json"
+source "$SCRIPT_DIR/services-funcs.sh"
 
-if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 <service-name>"
-    echo "Example: $0 opencode"
+usage() {
+    echo "Usage: aibox service-remove <name>"
+    echo ""
+    echo "Remove a service from services.json and stop forwarding its port."
+    echo "Any LAN exposure (permanent or temporary) for that service is removed too."
+    echo ""
+    echo "Options:"
+    echo "  -h, --help      Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  aibox service-remove portainer"
+}
+
+SERVICE_NAME=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -*)
+            echo "Error: unknown option: $1" >&2
+            usage >&2
+            exit 1
+            ;;
+        *)
+            if [[ -n "$SERVICE_NAME" ]]; then
+                echo "Error: too many arguments: $1" >&2
+                usage >&2
+                exit 1
+            fi
+            SERVICE_NAME="$1"
+            shift
+            ;;
+    esac
+done
+
+if [[ -z "$SERVICE_NAME" ]]; then
+    usage >&2
     exit 1
 fi
 
-SERVICE_NAME="$1"
-
-if [[ ! -f "$SERVICES_FILE" ]]; then
-    echo "No services configured."
+if [[ ! "$SERVICE_NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "Error: invalid service name '$SERVICE_NAME'." >&2
     exit 1
 fi
 
-if ! grep -q "\"$SERVICE_NAME\"" "$SERVICES_FILE" 2>/dev/null; then
+if ! services_require_jq; then
+    exit 1
+fi
+
+if ! service_exists "$SERVICE_NAME"; then
     echo "Service '$SERVICE_NAME' not found."
     exit 1
 fi
 
-TEMP=$(mktemp)
-jq --arg name "$SERVICE_NAME" 'del(.[$name])' "$SERVICES_FILE" > "$TEMP" && mv "$TEMP" "$SERVICES_FILE"
+if ! service_remove_json "$SERVICE_NAME"; then
+    echo "Error: could not update $SERVICES_FILE." >&2
+    exit 1
+fi
+lan_runtime_remove "$SERVICE_NAME" || true
 
 echo "Removed service '$SERVICE_NAME'"
 

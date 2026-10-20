@@ -1,6 +1,22 @@
 #!/bin/bash
 set -e
 
+usage_status() {
+    echo "Usage: aibox status"
+    echo ""
+    echo "Show the VM state, tunnel service state and per-service URLs, including"
+    echo "whether each service is localhost-only, permanently on the LAN, or"
+    echo "temporarily exposed."
+    echo ""
+    echo "Options:"
+    echo "  -h, --help      Show this help"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage_status
+    exit 0
+fi
+
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
     SOURCE_LINK="$(readlink "$SCRIPT_SOURCE")"

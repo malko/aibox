@@ -1,6 +1,22 @@
 #!/bin/bash
 set -e
 
+usage_restart() {
+    echo "Usage: aibox restart [-f|--force]"
+    echo ""
+    echo "Shut the VM down, start it again, and let the tunnel reconnect."
+    echo "With -f, force the shutdown step."
+    echo ""
+    echo "Options:"
+    echo "  -f, --force     Force the shutdown step"
+    echo "  -h, --help      Show this help"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage_restart
+    exit 0
+fi
+
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
     SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"

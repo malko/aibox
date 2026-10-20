@@ -1,5 +1,22 @@
 #!/bin/bash
 set -e
+
+usage_shutdown() {
+    echo "Usage: aibox shutdown [-f|--force]"
+    echo ""
+    echo "Stop the tunnel service, then shut the VM down gracefully."
+    echo "With -f, destroy the VM immediately."
+    echo ""
+    echo "Options:"
+    echo "  -f, --force     Force an immediate shutdown"
+    echo "  -h, --help      Show this help"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage_shutdown
+    exit 0
+fi
+
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
     SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"

@@ -6,6 +6,26 @@
 
 set -e
 
+usage_vscode() {
+    echo "Usage: aibox vscode [directory]"
+    echo ""
+    echo "Open the local VS Code on a directory inside the VM over SSH."
+    echo "With no argument, the current directory is used. The directory must be"
+    echo "inside the host share (HOST_SHARE_DIR, ~/git by default)."
+    echo ""
+    echo "Options:"
+    echo "  -h, --help      Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  aibox vscode"
+    echo "  aibox vscode ~/git/my-project"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage_vscode
+    exit 0
+fi
+
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
     SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"

@@ -10,7 +10,6 @@ CMD_DIR="$SCRIPT_DIR/cmd"
 
 # Global options
 CONFIG_FILE=""
-OPEN_WEB=false
 NO_SERVICE=false
 LAN_EXPOSE=false
 PEON_RELAY=false
@@ -23,11 +22,11 @@ usage() {
     echo "  start                             Start the VM and the tunnel service"
     echo "  status                            VM state, service URLs and tunnel state"
     echo "  exec [-t] [--] <cmd> [args]       Run a command in the VM (SSH, for scripting)"
-    echo "  tunnel <command>                  Manage the tunnel service (see 'aibox tunnel help')"
+    echo "  tunnel <command>                  Manage the tunnel and per-service LAN exposure"
     echo "  vscode [dir]                      Open the local VS Code on the VM (Remote-SSH)"
-    echo "  service-add <name> <port[:port]>  Add a service"
+    echo "  service-add <name> <port> [--lan] Add a service (--lan = permanent LAN exposure)"
     echo "  service-remove <name>             Remove a service"
-    echo "  service-list                      List configured services"
+    echo "  service-list                      List services and their LAN exposure"
     echo "  relay                             Enable/disable peon-ping relay by default"
     echo "  setup [step ...]                  Run setup steps (see 'aibox setup --help')"
     echo "  update <target>                   Update (opencode, opencode-service, dsh, claude, os, scripts, vscode-server, all)"
@@ -39,17 +38,21 @@ usage() {
     echo "  snapshot list                     List snapshots"
     echo "  snapshot delete <name>            Delete snapshot"
     echo "  snapshot revert <name>            Revert to snapshot"
+    echo "  help [command]                    Show general help or a command's help"
     echo ""
     echo "Examples:"
     echo "  aibox                                Connect and open a shell"
     echo "  aibox start                          Start VM + tunnel without connecting"
     echo "  aibox status                         Show VM, URLs and tunnel state"
-    echo "  aibox tunnel lan on                  Expose services on the LAN"
+    echo "  aibox tunnel lan on opencode --permanent   Permanently expose opencode"
+    echo "  aibox tunnel lan on dsh --timeout 30m      Temporary LAN exposure"
+    echo "  aibox tunnel lan off opencode        Back to localhost for one service"
     echo "  aibox -c /path/to/config.conf        Use custom config file"
     echo "  aibox service-add opencode 4096      Add opencode service"
+    echo "  aibox service-add portainer 8080:9000 --lan"
+    echo "  aibox help service-add               Show help for service-add"
     echo "  aibox setup motd                     Reconfigure the MOTD only"
     echo "  aibox update opencode                Update and restart opencode"
-    echo "  aibox update opencode-service        Reinstall the opencode service"
     echo "  aibox update scripts                 Upload scripts to VM"
     echo "  aibox shutdown                       Gracefully shutdown VM"
     echo "  aibox restart                        Restart VM"
@@ -57,7 +60,6 @@ usage() {
     echo ""
     echo "Options:"
     echo "  -c, --config FILE    Path to config file (default: ~/.config/aibox/aibox.conf)"
-    echo "  -w, --open-web       Open browser after connecting"
     echo "  -n, --no-service     Start without SSH tunnels (no port forwarding)"
     echo "      --lan            Bind ad-hoc forwarded ports on the LAN (0.0.0.0)"
     echo "  -p, --peon-relay     Enable peon-ping relay (port 19998)"
@@ -66,9 +68,56 @@ usage() {
     exit 0
 }
 
-load_services() {
-    if [[ -f "$SERVICES_FILE" ]]; then
-        jq -r 'to_entries[] | .value' "$SERVICES_FILE" 2>/dev/null || echo ""
+help_command() {
+    local command="$1" script=""
+
+    case "$command" in
+        setup)
+            "$SCRIPT_DIR/setup.sh" --help
+            return $?
+            ;;
+        relay)
+            echo "Usage: aibox relay [on|off]"
+            echo ""
+            echo "Enable or disable the peon-ping relay by default."
+            return 0
+            ;;
+        help)
+            echo "Usage: aibox help [command]"
+            echo ""
+            echo "Show general help, or the dedicated help for one command."
+            return 0
+            ;;
+        update)
+            script="$CMD_DIR/update-target"
+            ;;
+        shutdown)
+            script="$CMD_DIR/vm-shutdown"
+            ;;
+        restart)
+            script="$CMD_DIR/vm-restart"
+            ;;
+        snapshot)
+            script="$CMD_DIR/vm-snapshot"
+            ;;
+        start|status|exec|vscode|tunnel|service-add|service-remove|service-list|check-updates|self-update)
+            script="$CMD_DIR/$command"
+            ;;
+        "")
+            usage
+            ;;
+        *)
+            echo "Error: no help for unknown command '$command'." >&2
+            echo "Run 'aibox --help' for the command list." >&2
+            return 1
+            ;;
+    esac
+
+    if [[ -x "$script" ]]; then
+        "$script" --help
+    else
+        echo "Error: command script not found: $script" >&2
+        return 1
     fi
 }
 
@@ -81,6 +130,74 @@ completion() {
         cat << 'ZEOF'
 #compdef aibox
 
+_aibox_services() {
+    local -a services
+    services=(${(f)"$(jq -r 'keys[]' "$HOME/.config/aibox/services.json" 2>/dev/null)"})
+    services=(${services:#})
+    (( ${#services} )) || return 0
+    _describe 'service' services
+}
+
+_aibox_snapshots() {
+    local -a snapshots
+    snapshots=(${(f)"$(virsh snapshot-list aibox --name 2>/dev/null)"})
+    snapshots=(${snapshots:#})
+    (( ${#snapshots} )) || return 0
+    _describe 'snapshot' snapshots
+}
+
+_aibox_setup_steps() {
+    local -a steps
+    steps=(${(f)"$(aibox --setup-steps 2>/dev/null)"})
+    steps+=(all)
+    _describe 'step' steps
+}
+
+_aibox_tunnel() {
+    if (( CURRENT == 2 )); then
+        _values 'tunnel command' start stop restart status logs install uninstall lan
+        return
+    fi
+
+    case $words[2] in
+        lan)
+            if (( CURRENT == 3 )); then
+                _values 'lan command' on off
+                return
+            fi
+            case $words[3] in
+                on)
+                    _arguments \
+                        '--permanent[persist LAN exposure]' \
+                        '--timeout[temporary duration]:duration:(30m 1h 2h 0)' \
+                        '--no-timeout[temporary until reboot]' \
+                        '(-y --yes)'{-y,--yes}'[do not ask for confirmation]' \
+                        '(-h --help)'{-h,--help}'[show help]' \
+                        '*:service:_aibox_services'
+                    ;;
+                off)
+                    _arguments \
+                        '(-h --help)'{-h,--help}'[show help]' \
+                        '*:service:_aibox_services'
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_aibox_snapshot() {
+    if (( CURRENT == 2 )); then
+        _values 'snapshot command' create list delete revert
+        return
+    fi
+
+    case $words[2] in
+        delete|revert)
+            _arguments '*:snapshot:_aibox_snapshots'
+            ;;
+    esac
+}
+
 local -a commands
 commands=(
   'start:start VM and tunnel'
@@ -91,6 +208,7 @@ commands=(
   'service-add:add a service'
   'service-remove:remove a service'
   'service-list:list configured services'
+  'relay:enable or disable the peon-ping relay'
   'setup:run setup steps'
   'update:update service or app (opencode, opencode-service, dsh, claude, os, scripts, vscode-server, all)'
   'check-updates:check for available updates (host + VM)'
@@ -98,9 +216,18 @@ commands=(
   'shutdown:shutdown VM'
   'restart:restart VM'
   'snapshot:manage snapshots'
+  'help:show general or command help'
 )
 
-_arguments -C '1: :->command' '*: :->args'
+_arguments -C \
+  '(-c --config)'{-c,--config}'[config file]:config file:_files' \
+  '(-n --no-service)'{-n,--no-service}'[start without port forwarding]' \
+  '--lan[bind ad-hoc ports on the LAN]' \
+  '(-p --peon-relay)'{-p,--peon-relay}'[enable peon-ping relay]' \
+  '(-h --help)'{-h,--help}'[show help]' \
+  '--completion[output completion script]:shell:(bash zsh)' \
+  '1:command:->command' \
+  '*::arg:->args'
 
 case $state in
   command)
@@ -108,33 +235,57 @@ case $state in
     ;;
   args)
     case $words[1] in
-      service-add)
-        _message 'service name'
+      start|status|check-updates|self-update)
+        _values 'flag' '-h' '--help'
+        ;;
+      exec)
+        _command_names -e
         ;;
       tunnel)
-        _values 'tunnel command' start stop restart status logs install uninstall 'lan on' 'lan off'
+        _aibox_tunnel
+        ;;
+      vscode)
+        _files -/
+        ;;
+      service-add)
+        _arguments \
+          '--lan[expose permanently on the LAN]' \
+          '(-y --yes)'{-y,--yes}'[do not ask for confirmation]' \
+          '(-h --help)'{-h,--help}'[show help]' \
+          '1:name:' \
+          '2:port:'
         ;;
       service-remove)
-        _values 'services' $(jq -r 'keys[]' ~/.config/aibox/services.json 2>/dev/null)
+        _arguments \
+          '(-h --help)'{-h,--help}'[show help]' \
+          '*:service:_aibox_services'
         ;;
-      snapshot)
-        local -a snapshot_cmds
-        snapshot_cmds=(
-          'create:create snapshot'
-          'list:list snapshots'
-          'delete:delete snapshot'
-          'revert:revert to snapshot'
-        )
-        _describe 'snapshot command' snapshot_cmds
+      service-list)
+        _values 'flag' '-h' '--help'
         ;;
-      shutdown|restart)
-        _values 'flags' '-f --force'
+      relay)
+        _values 'relay' on off
         ;;
       setup)
-        _values 'steps' $(aibox --setup-steps) all
+        _arguments \
+          '(-c --config)'{-c,--config}'[config file]:config file:_files' \
+          '(-h --help)'{-h,--help}'[show help]' \
+          '*:step:_aibox_setup_steps'
         ;;
       update)
-        _values 'targets' 'opencode' 'opencode-service' 'dsh' 'claude' 'os' 'scripts' 'vscode-server' 'all'
+        _arguments \
+          '(-y --yes)'{-y,--yes}'[non-interactive system upgrade]' \
+          '(-h --help)'{-h,--help}'[show help]' \
+          '*:target:(opencode opencode-service dsh claude os scripts vscode-server all)'
+        ;;
+      shutdown|restart)
+        _values 'flag' '-f' '--force' '-h' '--help'
+        ;;
+      snapshot)
+        _aibox_snapshot
+        ;;
+      help)
+        _describe 'command' commands
         ;;
     esac
     ;;
@@ -143,65 +294,182 @@ ZEOF
     else
         # Bash completion
         cat << 'BASHEOF'
+_aibox_services() {
+    jq -r 'keys[]' "$HOME/.config/aibox/services.json" 2>/dev/null
+}
+
+_aibox_snapshots() {
+    virsh snapshot-list aibox --name 2>/dev/null
+}
+
 _aibox() {
-    local cur prev opts
+    local cur prev cmd cmd_idx sub sub_idx lan_idx lan_sub i
+    local opts="start status exec tunnel vscode service-add service-remove service-list relay setup update check-updates self-update shutdown restart snapshot help"
+    local global_opts="-c --config -n --no-service --lan -p --peon-relay -h --help --completion"
+
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    opts="start status exec tunnel vscode service-add service-remove service-list setup update check-updates self-update shutdown restart snapshot"
-
-    case "${prev}" in
-        aibox)
-            COMPREPLY=($(compgen -W "${opts}" -- "${cur}"))
+    case "$prev" in
+        -c|--config)
+            COMPREPLY=($(compgen -f -- "$cur"))
             return 0
             ;;
-        service-add)
+        --completion)
+            COMPREPLY=($(compgen -W "bash zsh" -- "$cur"))
             return 0
             ;;
-        tunnel)
-            COMPREPLY=($(compgen -W "start stop restart status logs install uninstall lan" -- "${cur}"))
-            return 0
-            ;;
-        exec)
-            COMPREPLY=($(compgen -c -- "${cur}"))
-            return 0
-            ;;
-        vscode)
-            COMPREPLY=($(compgen -d -- "${cur}"))
-            return 0
-            ;;
-        setup)
-            COMPREPLY=($(compgen -W "$(aibox --setup-steps) all" -- "${cur}"))
-            return 0
-            ;;
-        service-remove)
-            COMPREPLY=($(compgen -W "$(jq -r 'keys[]' ~/.config/aibox/services.json 2>/dev/null)" -- "${cur}"))
-            return 0
-            ;;
-        snapshot)
-            COMPREPLY=($(compgen -W "create list delete revert" -- "${cur}"))
-            return 0
-            ;;
-        update)
-            COMPREPLY=($(compgen -W "opencode opencode-service dsh claude os scripts vscode-server all" -- "${cur}"))
-            return 0
-            ;;
-        shutdown|restart)
-            COMPREPLY=($(compgen -W "-f --force" -- "${cur}"))
-            return 0
-            ;;
-        -f|--force)
-            return 0
-            ;;
-        create|delete|revert)
-            COMPREPLY=($(compgen -W "$(virsh snapshot-list aibox --name 2>/dev/null)" -- "${cur}"))
+        --timeout)
+            COMPREPLY=($(compgen -W "30m 1h 2h 0" -- "$cur"))
             return 0
             ;;
     esac
 
-    COMPREPLY=($(compgen -W "${opts}" -- "${cur}"))
-    return 0
+    # Find the command, skipping global options and their values.
+    cmd_idx=""
+    i=1
+    while [[ $i -lt $COMP_CWORD ]]; do
+        case "${COMP_WORDS[i]}" in
+            -c|--config|--completion)
+                i=$((i + 2))
+                ;;
+            -*)
+                i=$((i + 1))
+                ;;
+            *)
+                cmd_idx=$i
+                break
+                ;;
+        esac
+    done
+
+    if [[ -z "$cmd_idx" ]]; then
+        COMPREPLY=($(compgen -W "$global_opts $opts" -- "$cur"))
+        return 0
+    fi
+
+    cmd="${COMP_WORDS[cmd_idx]}"
+    case " $opts " in
+        *" $cmd "*) ;;
+        *) return 0 ;;
+    esac
+
+    sub_idx=$((cmd_idx + 1))
+    sub="${COMP_WORDS[sub_idx]:-}"
+
+    case "$cmd" in
+        tunnel)
+            if [[ $COMP_CWORD -eq $sub_idx ]]; then
+                COMPREPLY=($(compgen -W "start stop restart status logs install uninstall lan" -- "$cur"))
+                return 0
+            fi
+            if [[ "$sub" == "lan" ]]; then
+                lan_idx=$((cmd_idx + 2))
+                lan_sub="${COMP_WORDS[lan_idx]:-}"
+                if [[ $COMP_CWORD -eq $lan_idx ]]; then
+                    COMPREPLY=($(compgen -W "on off" -- "$cur"))
+                    return 0
+                fi
+                case "$lan_sub" in
+                    on)
+                        if [[ "$cur" == --timeout=* ]]; then
+                            COMPREPLY=($(compgen -W "--timeout=30m --timeout=1h --timeout=2h --timeout=0" -- "$cur"))
+                        elif [[ "$cur" == -* ]]; then
+                            COMPREPLY=($(compgen -W "--permanent --timeout --no-timeout -y --yes -h --help" -- "$cur"))
+                        else
+                            COMPREPLY=($(compgen -W "$(_aibox_services)" -- "$cur"))
+                        fi
+                        ;;
+                    off)
+                        if [[ "$cur" == -* ]]; then
+                            COMPREPLY=($(compgen -W "-h --help" -- "$cur"))
+                        else
+                            COMPREPLY=($(compgen -W "$(_aibox_services)" -- "$cur"))
+                        fi
+                        ;;
+                esac
+                return 0
+            fi
+            return 0
+            ;;
+        service-add)
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=($(compgen -W "--lan -y --yes -h --help" -- "$cur"))
+            fi
+            return 0
+            ;;
+        service-remove)
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=($(compgen -W "-h --help" -- "$cur"))
+            else
+                COMPREPLY=($(compgen -W "$(_aibox_services)" -- "$cur"))
+            fi
+            return 0
+            ;;
+        service-list|start|status|check-updates|self-update)
+            COMPREPLY=($(compgen -W "-h --help" -- "$cur"))
+            return 0
+            ;;
+        snapshot)
+            if [[ $COMP_CWORD -eq $sub_idx ]]; then
+                COMPREPLY=($(compgen -W "create list delete revert" -- "$cur"))
+                return 0
+            fi
+            if [[ "$sub" == "delete" || "$sub" == "revert" ]]; then
+                COMPREPLY=($(compgen -W "$(_aibox_snapshots)" -- "$cur"))
+            fi
+            return 0
+            ;;
+        setup)
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=($(compgen -W "-c --config -h --help" -- "$cur"))
+            else
+                COMPREPLY=($(compgen -W "$(aibox --setup-steps 2>/dev/null) all" -- "$cur"))
+            fi
+            return 0
+            ;;
+        update)
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=($(compgen -W "-y --yes -h --help" -- "$cur"))
+            else
+                COMPREPLY=($(compgen -W "opencode opencode-service dsh claude os scripts vscode-server all" -- "$cur"))
+            fi
+            return 0
+            ;;
+        shutdown|restart)
+            COMPREPLY=($(compgen -W "-f --force -h --help" -- "$cur"))
+            return 0
+            ;;
+        relay)
+            COMPREPLY=($(compgen -W "on off" -- "$cur"))
+            return 0
+            ;;
+        help)
+            COMPREPLY=($(compgen -W "$opts" -- "$cur"))
+            return 0
+            ;;
+        vscode)
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=($(compgen -W "-h --help" -- "$cur"))
+            else
+                COMPREPLY=($(compgen -d -- "$cur"))
+            fi
+            return 0
+            ;;
+        exec)
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=($(compgen -W "-t --tty -T --no-tty -h --help" -- "$cur"))
+            else
+                COMPREPLY=($(compgen -c -- "$cur"))
+            fi
+            return 0
+            ;;
+        *)
+            COMPREPLY=($(compgen -W "-h --help" -- "$cur"))
+            return 0
+            ;;
+    esac
 }
 
 complete -F _aibox aibox
@@ -215,6 +483,16 @@ if [[ "${1:-}" == "setup" ]]; then
     exec "$SCRIPT_DIR/setup.sh" "$@"
 fi
 
+# Service commands are dispatched before global option parsing so that
+# 'service-add ... --lan' is not mistaken for the global ad-hoc --lan flag.
+case "${1:-}" in
+    service-add|service-remove|service-list)
+        COMMAND="$1"
+        shift
+        exec "$CMD_DIR/$COMMAND" "$@"
+        ;;
+esac
+
 # --- Argument Parsing ---
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -226,10 +504,6 @@ while [[ $# -gt 0 ]]; do
             CONFIG_FILE="$2"
             echo "Setting config file to $CONFIG_FILE"
             shift 2
-            ;;
-        -w|--open-web)
-            OPEN_WEB=true
-            shift
             ;;
         -n|--no-service)
             NO_SERVICE=true
@@ -244,6 +518,10 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
+            if [[ ${#POSITIONAL_ARGS[@]} -gt 0 ]]; then
+                help_command "${POSITIONAL_ARGS[0]}"
+                exit $?
+            fi
             usage
             ;;
         --completion)
@@ -284,6 +562,7 @@ init_config_file
 VM_NAME=$(get_config "VM_NAME" "aibox")
 GUEST_USER=$(get_config "GUEST_USER" "aibox")
 SERVICES_FILE="${HOME}/.config/aibox/services.json"
+source "$SCRIPT_DIR/services-funcs.sh"
 LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 [[ "$PEON_RELAY" == "false" ]] && PEON_RELAY=$(get_config "PEON_RELAY" "false")
 
@@ -293,8 +572,11 @@ source "$SCRIPT_DIR/host/vm.sh"
 # Handle commands
 case "$1" in
     help)
+        if [[ -n "${2:-}" ]]; then
+            help_command "$2"
+            exit $?
+        fi
         usage
-        exit 0
         ;;
     start)
         "$CMD_DIR/start"
@@ -421,38 +703,42 @@ if [[ "$TUNNEL_INSTALLED" == "false" && "$NO_SERVICE" == "false" && -f "$SERVICE
     print_info "Install it once with 'aibox tunnel install' (or 'aibox setup tunnel')."
 fi
 
-if [[ "$NO_SERVICE" == "false" ]]; then
-    if [[ "$TUNNEL_INSTALLED" == "true" ]]; then
-        set -- "${CLI_PORTS[@]}"
-    else
-        SERVICES=()
-        while IFS= read -r port; do
-            [[ -n "$port" ]] && SERVICES+=("$port")
-        done < <(load_services)
+# Configured services are exposed by the tunnel service when it is installed.
+# Otherwise build session forwards here, with the per-service bind address.
+SERVICE_FORWARD_ARGS=()
 
-        # Merge command line args with services
-        ALL_PORTS=("${SERVICES[@]}")
-        for arg in "${CLI_PORTS[@]}"; do
-            ALL_PORTS+=("$arg")
-        done
+if [[ -f "$SERVICES_FILE" ]]; then
+    while IFS=$'\t' read -r name port; do
+        [[ -n "$name" && -n "$port" ]] || continue
 
-        # Use all ports or default to services
-        if [[ ${#ALL_PORTS[@]} -eq 0 && ${#SERVICES[@]} -gt 0 ]]; then
-            set -- "${SERVICES[@]}"
-        elif [[ ${#ALL_PORTS[@]} -eq 0 ]]; then
-            echo "No services configured. Add one with: aibox service-add <name> <port>"
-            exit 1
+        if [[ "$port" == *:* ]]; then
+            HOST_PORT="${port%%:*}"
+            GUEST_PORT="${port#*:}"
         else
-            set -- "${ALL_PORTS[@]}"
+            HOST_PORT="$port"
+            GUEST_PORT="$port"
         fi
-    fi
-else
-    # --no-service: only use command line port args
-    set -- "${CLI_PORTS[@]}"
-    if [[ $# -eq 0 ]]; then
-        echo "Connecting without services (--no-service)"
+
+        if [[ "$NO_SERVICE" == "false" && "$TUNNEL_INSTALLED" == "false" ]]; then
+            BIND="127.0.0.1"
+            [[ "$(service_effective_lan "$name")" != "local" ]] && BIND="0.0.0.0"
+            SERVICE_FORWARD_ARGS+=(-L "$BIND:$HOST_PORT:127.0.0.1:$GUEST_PORT")
+        fi
+    done < <(services_entries)
+fi
+
+if [[ "$NO_SERVICE" == "false" && "$TUNNEL_INSTALLED" == "false" ]]; then
+    if [[ ${#SERVICE_FORWARD_ARGS[@]} -eq 0 && ${#CLI_PORTS[@]} -eq 0 ]]; then
+        echo "No services configured. Add one with: aibox service-add <name> <port>"
+        exit 1
     fi
 fi
+
+if [[ "$NO_SERVICE" == "true" && ${#CLI_PORTS[@]} -eq 0 ]]; then
+    echo "Connecting without services (--no-service)"
+fi
+
+set -- "${CLI_PORTS[@]}"
 
 # Start VM if it's not running
 if ! vm_exists "$VM_NAME"; then
@@ -495,8 +781,9 @@ if [[ "$LAN_EXPOSE" == "true" ]]; then
     BIND_ADDR="0.0.0.0"
 fi
 
-# Build the Forwarding String (only if ports are specified)
-FORWARD_ARGS=""
+# Build the SSH forwarding arguments: configured services (when the tunnel
+# service is not installed) plus ad-hoc ports from the command line.
+FORWARD_ARGS=("${SERVICE_FORWARD_ARGS[@]}")
 if [[ $# -gt 0 ]]; then
     for ARG in "$@"; do
         if [[ "$ARG" == *:* ]]; then
@@ -507,12 +794,12 @@ if [[ $# -gt 0 ]]; then
             GUEST_PORT="$ARG"
         fi
 
-        FORWARD_ARGS="$FORWARD_ARGS -L $BIND_ADDR:$HOST_PORT:127.0.0.1:$GUEST_PORT"
+        FORWARD_ARGS+=(-L "$BIND_ADDR:$HOST_PORT:127.0.0.1:$GUEST_PORT")
     done
 fi
 
 if [[ "$PEON_RELAY" == "true" ]]; then
-    FORWARD_ARGS="$FORWARD_ARGS -R 19998:localhost:19998"
+    FORWARD_ARGS+=(-R "19998:localhost:19998")
 fi
 
 # Wait for SSH to be ready
@@ -524,38 +811,14 @@ done
 echo -e "\nSSH is ready!"
 
 # Connect
-if [[ -n "$FORWARD_ARGS" ]]; then
-    echo "Connecting to $GUEST_USER@$GUEST_IP with port(s): $*"
+if [[ ${#FORWARD_ARGS[@]} -gt 0 ]]; then
+    if [[ $# -gt 0 ]]; then
+        echo "Connecting to $GUEST_USER@$GUEST_IP with port(s): $*"
+    else
+        echo "Connecting to $GUEST_USER@$GUEST_IP with configured services"
+    fi
 else
     echo "Connecting to $GUEST_USER@$GUEST_IP (no port forwarding)"
 fi
 
-# Open browser if -w flag is set
-if [[ "$OPEN_WEB" == "true" ]]; then
-    if [[ $# -gt 0 ]]; then
-        HOST_PORT="${1%%:*}"
-    else
-        HOST_PORT=$(jq -r 'to_entries[0].value' "$SERVICES_FILE" 2>/dev/null || echo "")
-        HOST_PORT="${HOST_PORT%%:*}"
-    fi
-
-    if [[ -z "$HOST_PORT" ]]; then
-        print_error "No service port to open."
-    else
-        if [[ "$LAN_EXPOSE" == "true" ]]; then
-            URL_HOST=$(hostname).local
-        else
-            URL_HOST="localhost"
-        fi
-        BROWSER_URL="http://${URL_HOST}:${HOST_PORT}"
-
-        echo "Opening browser to $BROWSER_URL..."
-        if command -v xdg-open &>/dev/null; then
-            xdg-open "$BROWSER_URL" &
-        elif command -v open &>/dev/null; then
-            open "$BROWSER_URL" &
-        fi
-    fi
-fi
-
-ssh -o ConnectTimeout=5 $FORWARD_ARGS "$GUEST_USER@$GUEST_IP"
+ssh -o ConnectTimeout=5 "${FORWARD_ARGS[@]}" "$GUEST_USER@$GUEST_IP"

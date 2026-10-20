@@ -124,5 +124,6 @@ if [[ "$(get_config "INSTALL_DSH" "no")" == "yes" ]]; then
 fi
 
 echo ""
-print_info "To expose services on the LAN (temporary):"
-echo "  aibox tunnel lan on"
+print_info "To expose a service on the LAN:"
+echo "  aibox tunnel lan on opencode --permanent   # survives reboot"
+echo "  aibox tunnel lan on dsh --timeout 30m      # temporary"

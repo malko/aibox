@@ -41,8 +41,9 @@ an authenticated SSH tunnel managed as a user service.
 (`systemd --user` on Linux, LaunchAgent on macOS) that keeps one SSH tunnel
 open per configured service. It:
 
-- binds on `127.0.0.1` by default: services are reachable from the host only,
-  at `http://localhost:<port>`;
+- binds each service on `127.0.0.1` by default: services are reachable from
+  the host only, at `http://localhost:<port>`. A service can be exposed on the
+  LAN independently of the others (see below);
 - waits for the VM (`TUNNEL_WAIT`, 120s) when it is off, then stops cleanly:
   no polling and no resource use while the VM is down;
 - reconnects by itself after a VM restart (the restart drops the SSH
@@ -61,7 +62,7 @@ open per configured service. It:
 | `aibox shutdown` | Stop the tunnel service, then shut the VM down |
 | `aibox restart` | Restart the VM; the tunnel reconnects automatically |
 | `aibox tunnel start/stop/restart` | Control the tunnel without touching the VM |
-| `aibox tunnel status` | Tunnel state, bind mode and URLs |
+| `aibox tunnel status` | Tunnel state and per-service URLs/LAN modes |
 | `aibox tunnel logs` | Last tunnel logs |
 
 ### Always-on at login (optional)
@@ -75,18 +76,43 @@ open) while you are not using the VM.
 
 ### LAN exposure
 
-`aibox tunnel lan on` rebinds the tunnels on `0.0.0.0`, making the services
-reachable from the LAN at `http://<hostname>.local:<port>`. Before exposing,
-aibox checks the guest for unauthenticated services and warns (vscode-server
-without password auth). opencode generates its own server password at startup
-and dsh-web connection URLs embed an authentication token, so no warning is
-needed for them.
+LAN exposure is decided **per service**, so you can expose opencode while
+keeping dsh localhost-only. Each service has one of three modes:
 
-The exposure is time-limited: it reverts to localhost after
-`TUNNEL_LAN_TIMEOUT` (default `2h`). `--timeout 30m` overrides it,
-`--no-timeout` (or `--timeout 0`) disables the automatic revert, and
-`aibox tunnel lan off` turns it off immediately. The expiry survives reboots
-(it is checked lazily on the next command).
+| Mode | How to set it | Survives reboot? |
+|---|---|---|
+| `localhost` | default, or `aibox tunnel lan off <service>` | — |
+| temporary | `aibox tunnel lan on <service>` | No |
+| permanent | `aibox tunnel lan on <service> --permanent` | Yes |
+
+```bash
+aibox tunnel lan on opencode --permanent    # always exposed
+aibox tunnel lan on dsh --timeout 30m       # temporary, expires in 30 min
+aibox tunnel lan on dsh --no-timeout        # temporary until reboot
+aibox tunnel lan off opencode               # back to localhost
+aibox tunnel lan on                         # all services, temporary
+```
+
+Temporary exposure is stored outside `services.json` in a per-boot runtime
+state: it is lost at the next reboot (and may also be lost at logout when the
+runtime directory is cleared), even if its timeout has not expired. Permanent
+exposure is stored in `services.json` and applied again on the next
+`aibox start`. `--permanent`, `--timeout` and `--no-timeout` are mutually
+exclusive.
+
+The default temporary duration is `TUNNEL_LAN_TIMEOUT` (default `2h`).
+`--timeout 30m` overrides it and `--no-timeout` removes the time limit. A
+per-service timer reverts the exposure automatically; the expiry is also
+checked lazily on the next command and by the tunnel on startup.
+
+`aibox service-add opencode 4096 --lan` is shorthand for adding a service with
+permanent LAN exposure (`--yes` skips the confirmation prompt).
+`aibox service-list` shows the mode of every service.
+
+Before exposing, aibox checks the selected guest services for missing
+authentication and warns (vscode-server without password auth). opencode
+generates its own server password at startup and dsh-web connection URLs embed
+an authentication token, so no warning is needed for them.
 
 ### Ad-hoc ports
 
@@ -123,8 +149,29 @@ your local ssh-agent to sign as you, e.g. to `git push`.
 ./aibox                      # Start VM + tunnel, then open a shell
 ./aibox 8081:80             # Also forward host 8081 to guest 80 (session only)
 ./aibox --lan 3000          # Ad-hoc forward exposed on the LAN
-./aibox -w                   # Open the browser for the first service
 ```
+
+### Help
+
+```bash
+./aibox help                  # General help
+./aibox help service-add      # Help for one command
+./aibox service-add --help    # Same, from the command itself
+```
+
+### Shell completion
+
+```bash
+# Bash
+./aibox --completion bash > ~/.local/share/bash-completion/completions/aibox
+
+# Zsh (add ~/.zsh/completions to fpath)
+./aibox --completion zsh > ~/.zsh/completions/_aibox
+```
+
+Completion covers commands, options, tunnel/LAN subcommands, configured
+services for `service-remove` and `tunnel lan on/off`, snapshot names for
+`snapshot delete/revert`, setup steps and update targets.
 
 ### Start / status
 
@@ -157,12 +204,14 @@ immediately with a non-zero status.
 ### Tunnel management
 
 ```bash
-./aibox tunnel status                 # Tunnel state, bind mode, URLs
+./aibox tunnel status                 # Tunnel state, per-service URLs and LAN modes
 ./aibox tunnel start                  # Start the tunnel (VM keeps running)
 ./aibox tunnel stop                   # Stop the tunnel (VM keeps running)
-./aibox tunnel lan on                 # Expose services on the LAN (2h by default)
-./aibox tunnel lan on --timeout 30m   # ... for 30 minutes
-./aibox tunnel lan off                # Back to localhost only
+./aibox tunnel lan on opencode --permanent   # Permanently expose one service
+./aibox tunnel lan on dsh --timeout 30m      # Temporary exposure (30 min)
+./aibox tunnel lan on dsh --no-timeout       # Temporary until reboot
+./aibox tunnel lan off opencode              # Back to localhost for one service
+./aibox tunnel lan off                       # Back to localhost for all services
 ./aibox tunnel install                # Install the user service
 ./aibox tunnel uninstall              # Remove the user service
 ./aibox tunnel logs                   # Last tunnel logs
@@ -197,9 +246,10 @@ Notes:
 ### Service Management
 
 ```bash
-./aibox service-add opencode 4096           # Add a service
+./aibox service-add opencode 4096            # Add a service (localhost only)
 ./aibox service-add portainer 8080:9000      # Add with custom port mapping
-./aibox service-list                         # List configured services
+./aibox service-add opencode 4096 --lan      # Add with permanent LAN exposure
+./aibox service-list                         # List services and LAN modes
 ./aibox service-remove opencode              # Remove a service
 ```
 
@@ -268,10 +318,19 @@ Services are stored in `~/.config/aibox/services.json`:
 
 ```json
 {
-  "opencode": "4096",
-  "portainer": "8080:9000"
+  "opencode": { "port": "4096", "lan": "permanent" },
+  "dsh": { "port": "3080" },
+  "portainer": { "port": "8080:9000" }
 }
 ```
+
+- `port` is the guest port, or `<host_port>:<guest_port>`.
+- `lan: "permanent"` exposes the service on the LAN and survives reboots.
+- Without `lan`, the service is localhost-only. Temporary LAN exposure is not
+  stored here: it lives in a per-boot runtime file and disappears at reboot.
+
+Legacy string entries (`"opencode": "4096"`) are still read and normalized to
+the object format on the next change.
 
 ### AIBox Config
 
@@ -285,10 +344,12 @@ GUEST_USER="aibox"
 Tunnel settings:
 
 ```
-TUNNEL_BIND="local"          # "local" (127.0.0.1) or "lan" (0.0.0.0)
-TUNNEL_LAN_TIMEOUT="2h"      # default 'lan on' auto-revert delay
+TUNNEL_LAN_TIMEOUT="2h"      # default temporary LAN duration
 TUNNEL_WAIT="120"            # seconds the tunnel waits for the VM
 ```
+
+`TUNNEL_BIND` was the old global LAN switch. It is migrated automatically to
+per-service settings on the next aibox command; it is no longer needed.
 
 ### OpenCode Config
 
@@ -310,9 +371,9 @@ aibox/
 │   ├── start                    # Start VM + tunnel (no shell)
 │   ├── status                   # VM state, URLs, tunnel state
 │   ├── tunnel                   # Manage the tunnel user service
-│   ├── service-add              # Add service
+│   ├── service-add              # Add service (optional permanent LAN)
 │   ├── service-remove           # Remove service
-│   ├── service-list             # List services
+│   ├── service-list             # List services and LAN modes
 │   ├── update-target            # Dispatch an update target
 │   ├── check-updates            # Check for available updates
 │   ├── self-update              # Pull the repo and push scripts to the VM
@@ -337,13 +398,17 @@ aibox/
 │   ├── install-claude.sh        # Install Claude Code
 │   ├── update-check.sh          # Gather available updates
 │   └── install-update-check.sh  # Install the update check timer
+├── services-funcs.sh            # services.json + per-service LAN state
 └── shared-funcs.sh              # Common functions
 ```
 
 ## Security Notes
 
-- Services are exposed on localhost only by default; use `aibox tunnel lan on`
-  (time-limited) when you really need LAN access
+- Services are exposed on localhost only by default; use
+  `aibox tunnel lan on <service>` for temporary access, or
+  `aibox tunnel lan on <service> --permanent` only when you really need it
+- Permanent exposure survives reboots; review it with `aibox service-list` and
+  turn it off with `aibox tunnel lan off <service>` when it is no longer needed
 - opencode generates its own server password at startup; vscode-server should
   keep a password; aibox warns before LAN exposure when they are unprotected
 - The host `~/git` share is writable by design: the agent can modify your

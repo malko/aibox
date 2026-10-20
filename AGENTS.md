@@ -10,8 +10,9 @@ This repository contains bash scripts for managing an AI development VM with KVM
   - `setup.sh` - Setup runner (also `aibox setup`)
   - `setup/lib.sh` - Step registry and prerequisite resolution
   - `setup/steps/*.sh` - One self-contained step per file
-  - `host/tunnel.sh` - Tunnel service entry point (ssh -N, one -L per service)
+  - `host/tunnel.sh` - Tunnel service entry point (ssh -N, one -L per service, per-service bind)
   - `host/service.sh` + `host/services/` - User service manager (systemd --user)
+  - `services-funcs.sh` - `services.json` helpers and per-service LAN state
   - `cmd/` - Service and VM management commands
 
 ## Commands
@@ -36,8 +37,10 @@ This repository contains bash scripts for managing an AI development VM with KVM
 ./aibox tunnel start            # Start the tunnel only (VM keeps running)
 ./aibox tunnel stop             # Stop the tunnel only
 ./aibox tunnel install          # Install the tunnel user service
-./aibox tunnel lan on           # Expose services on the LAN (time-limited)
-./aibox tunnel lan off          # Back to localhost only
+./aibox tunnel lan on dsh --timeout 30m         # Temporary LAN exposure
+./aibox tunnel lan on opencode --permanent      # Permanent LAN exposure
+./aibox tunnel lan off opencode                 # Back to localhost for one service
+./aibox tunnel lan off                          # Back to localhost for all
 ./aibox shutdown                # Stop tunnel + shutdown VM
 ./aibox restart                 # Restart VM (tunnel self-heals)
 
@@ -255,9 +258,10 @@ trap "rm -rf $TEMP_DIR" EXIT
 
 ## Importing / Sourcing
 
-This repo has no shared library files. If adding one:
+Shared helpers live at the repository root (`shared-funcs.sh`,
+`config-funcs.sh`, `services-funcs.sh`). When adding or using one:
 - Use `source` or `.` to import
-- Check file exists before sourcing
+- Check file exists before sourcing when the path is dynamic
 - Use absolute paths or paths relative to script location
 
 ## Testing

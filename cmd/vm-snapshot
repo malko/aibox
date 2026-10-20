@@ -19,7 +19,32 @@ vm_state() {
     LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null || echo "unknown"
 }
 
+usage_snapshot() {
+    echo "Usage: aibox snapshot <command> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  create [name]     Create snapshot (auto-generates name if not provided)"
+    echo "  list              List all snapshots"
+    echo "  delete <name>     Delete a snapshot"
+    echo "  revert <name>     Revert to a snapshot"
+    echo ""
+    echo "Options:"
+    echo "  -h, --help        Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  aibox snapshot create"
+    echo "  aibox snapshot create my-snapshot"
+    echo "  aibox snapshot list"
+    echo "  aibox snapshot delete my-snapshot"
+    echo "  aibox snapshot revert my-snapshot"
+}
+
 case "$ACTION" in
+    -h|--help)
+        usage_snapshot
+        exit 0
+        ;;
+
     list)
         echo "Snapshots for VM '$VM_NAME':"
         virsh -c "$LIBVIRT_DEFAULT_URI" snapshot-list "$VM_NAME" --name 2>/dev/null || echo "No snapshots found."
@@ -101,20 +126,7 @@ case "$ACTION" in
         ;;
 
     *)
-        echo "Usage: $0 <command> [options]"
-        echo ""
-        echo "Commands:"
-        echo "  create [name]     Create snapshot (auto-generates name if not provided)"
-        echo "  list              List all snapshots"
-        echo "  delete <name>    Delete a snapshot"
-        echo "  revert <name>    Revert to a snapshot"
-        echo ""
-        echo "Examples:"
-        echo "  $0 create                  # Create snapshot with auto-generated name"
-        echo "  $0 create my-snapshot     # Create snapshot with custom name"
-        echo "  $0 list                   # List all snapshots"
-        echo "  $0 delete my-snapshot     # Delete a snapshot"
-        echo "  $0 revert my-snapshot     # Revert to a snapshot"
+        usage_snapshot >&2
         exit 1
         ;;
 esac

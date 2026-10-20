@@ -39,6 +39,8 @@ CONFIGURE_VIRTIOFS="no"
 # HOST_SHARE_DIR="$HOME/git"
 
 # Tunnel service (exposes VM services on the host)
-# TUNNEL_BIND="local"          # "local" (127.0.0.1) or "lan" (0.0.0.0)
-# TUNNEL_LAN_TIMEOUT="2h"      # default auto-revert delay for 'tunnel lan on'
+# LAN exposure is configured per service:
+#   aibox tunnel lan on opencode --permanent   # survives reboot
+#   aibox tunnel lan on dsh --timeout 30m      # temporary
+# TUNNEL_LAN_TIMEOUT="2h"      # default auto-revert delay for temporary exposure
 # TUNNEL_WAIT="120"            # seconds the tunnel waits for the VM

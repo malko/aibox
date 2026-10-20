@@ -1,6 +1,22 @@
 #!/bin/bash
 set -e
 
+usage_start() {
+    echo "Usage: aibox start"
+    echo ""
+    echo "Start the VM and the tunnel service, then show the status."
+    echo "The tunnel applies the per-service LAN exposure configured with"
+    echo "'aibox tunnel lan on'."
+    echo ""
+    echo "Options:"
+    echo "  -h, --help      Show this help"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage_start
+    exit 0
+fi
+
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
     SOURCE_LINK="$(readlink "$SCRIPT_SOURCE")"

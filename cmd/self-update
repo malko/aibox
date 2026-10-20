@@ -1,6 +1,21 @@
 #!/bin/bash
 set -e
 
+usage_self_update() {
+    echo "Usage: aibox self-update"
+    echo ""
+    echo "Pull the aibox repository from its upstream and, when guest scripts"
+    echo "changed, re-upload them to the running VM."
+    echo ""
+    echo "Options:"
+    echo "  -h, --help      Show this help"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage_self_update
+    exit 0
+fi
+
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
     SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"

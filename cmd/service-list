@@ -1,11 +1,62 @@
 #!/bin/bash
 
-SERVICES_FILE="${HOME}/.config/aibox/services.json"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$SCRIPT_DIR/services-funcs.sh"
+
+usage() {
+    echo "Usage: aibox service-list"
+    echo ""
+    echo "List configured services, their ports and LAN exposure mode."
+    echo ""
+    echo "Modes:"
+    echo "  localhost                 Reachable from the host only"
+    echo "  LAN permanent             Exposed on the LAN, survives reboot"
+    echo "  LAN temporary until ...   Exposed until the timeout or the next reboot"
+    echo ""
+    echo "Options:"
+    echo "  -h, --help      Show this help"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage
+    exit 0
+fi
+
+if ! services_require_jq; then
+    exit 1
+fi
 
 if [[ ! -f "$SERVICES_FILE" ]]; then
     echo "No services configured."
     exit 0
 fi
 
+ENTRIES=$(services_entries)
+if [[ -z "$ENTRIES" ]]; then
+    echo "No services configured."
+    exit 0
+fi
+
 echo "Configured services:"
-jq -r 'to_entries[] | "  \(.key): \(.value)"' "$SERVICES_FILE"
+while IFS=$'\t' read -r name port; do
+    [[ -n "$name" ]] || continue
+
+    mode=$(service_effective_lan "$name")
+    case "$mode" in
+        permanent)
+            description="LAN permanent"
+            ;;
+        temporary)
+            until=$(service_lan_until "$name")
+            if [[ "$until" =~ ^[0-9]+$ ]] && [[ "$until" -gt 0 ]]; then
+                description="LAN temporary until $(date -d "@$until" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -r "$until" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "$until")"
+            else
+                description="LAN temporary until reboot"
+            fi
+            ;;
+        *)
+            description="localhost"
+            ;;
+    esac
+    printf '  %-16s %-14s %s\n' "$name" "$port" "$description"
+done <<< "$ENTRIES"

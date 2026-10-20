@@ -20,10 +20,8 @@ step_dsh() {
     print_info "Installing dsh-web service..."
     ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "source ~/.bashrc && ~/scripts/install-dsh-service.sh $DSH_PORT"
 
-    SERVICES_FILE="${HOME}/.config/aibox/services.json"
-    if [[ ! -f "$SERVICES_FILE" ]]; then
-        echo "{\"dsh\": \"$DSH_PORT\"}" > "$SERVICES_FILE"
-    elif ! grep -q '"dsh"' "$SERVICES_FILE" 2>/dev/null; then
+    source "$SCRIPT_DIR/services-funcs.sh"
+    if ! service_exists dsh; then
         "$SCRIPT_DIR/cmd/service-add" dsh "$DSH_PORT"
     fi
 }
