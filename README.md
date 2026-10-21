@@ -192,10 +192,12 @@ services for `service-remove` and `tunnel lan on/off`, snapshot names for
 ./aibox restart               # Restart VM (tunnel reconnects automatically)
 ```
 
-`aibox status` also reports whether each service port is listening in the VM:
-`[up]`, `[down]` or `[unknown]` (the VM is off or the check could not run). The
-check runs inside the VM, because the host port always accepts connections
-while the tunnel is up, even when the guest service is down.
+`aibox status` also reports whether each service port is listening in the VM: a
+green dot when the service answers, a red dot when it does not. The check runs
+inside the VM, because the host port always accepts connections while the
+tunnel is up, even when the guest service is down. When the output is
+redirected, the dot is replaced by the state as text (`[up]`, `[down]`,
+`[unknown]`).
 
 ### Web interface
 
@@ -371,6 +373,15 @@ Steps (in order): `vm`, `ssh`, `scripts`, `deps`, `sshd`, `git`, `dirs`,
 The `cli` step is host-only: it links `aibox` into `~/bin`, adds `~/bin` to
 `PATH` when needed, and installs bash/zsh completion. It does not modify the VM
 and does not need root.
+
+The `motd` step installs the login banner in the VM. It shows the services it
+knows about with a coloured dot: green when the service answers on its port,
+red when the unit runs but the port is closed, dim when the service is
+installed but not running. Re-run the step to update an installed banner:
+
+```bash
+./setup.sh motd
+```
 
 Answers are stored in the config file and reused as defaults; a step only
 prompts for the values it needs.

@@ -151,6 +151,20 @@ guest_dsh_suffix() {
     printf '%s' "$url" | sed -E 's#^https?://[^/]+##'
 }
 
+# print_service_line <state> <name> <url> [extra]
+# Prints one service line with its availability marker. The marker is printed
+# directly (not through a command substitution) so the terminal detection
+# still sees the real stdout.
+print_service_line() {
+    local state="$1" name="$2" url="$3" extra="${4:-}"
+
+    printf '  '
+    aibox_status_dot "$state"
+    printf '%-14s %s%s' "$name" "$url" "$extra"
+    aibox_status_text "$state"
+    printf '\n'
+}
+
 service_urls() {
     local show_tokens="${1:-}"
     [[ -f "$SERVICES_FILE" ]] || return 0
@@ -185,20 +199,20 @@ service_urls() {
             fi
         fi
 
-        printf '  %-14s http://localhost:%s%s%s  [%s]\n' "$name" "$host" "$suffix" "$auth" "$state_label"
+        print_service_line "$state_label" "$name" "http://localhost:${host}${suffix}" "$auth"
 
         mode=$(service_effective_lan "$name")
         if [[ "$mode" == "permanent" ]]; then
-            printf '  %-14s http://%s:%s%s  (LAN permanent)%s  [%s]\n' \
-                "$name" "$(host_local_name)" "$host" "$suffix" "$auth" "$state_label"
+            print_service_line "$state_label" "$name" \
+                "http://$(host_local_name):${host}${suffix}  (LAN permanent)" "$auth"
         elif [[ "$mode" == "temporary" ]]; then
             until=$(service_lan_until "$name")
             if [[ "$until" =~ ^[0-9]+$ ]] && [[ "$until" -gt 0 ]]; then
-                printf '  %-14s http://%s:%s%s  (LAN temporary until %s)%s  [%s]\n' \
-                    "$name" "$(host_local_name)" "$host" "$suffix" "$(format_epoch "$until")" "$auth" "$state_label"
+                print_service_line "$state_label" "$name" \
+                    "http://$(host_local_name):${host}${suffix}  (LAN temporary until $(format_epoch "$until"))" "$auth"
             else
-                printf '  %-14s http://%s:%s%s  (LAN temporary until reboot)%s  [%s]\n' \
-                    "$name" "$(host_local_name)" "$host" "$suffix" "$auth" "$state_label"
+                print_service_line "$state_label" "$name" \
+                    "http://$(host_local_name):${host}${suffix}  (LAN temporary until reboot)" "$auth"
             fi
         fi
     done < <(services_entries)

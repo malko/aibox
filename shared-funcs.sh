@@ -91,6 +91,54 @@ print_success() { echo -e "\033[0;32m✅ $1\033[0m"; }
 print_warn() { echo -e "\033[1;33m⚠️  $1\033[0m"; }
 print_error() { echo -e "\033[0;31m❌ $1\033[0m" >&2; }
 
+# True when the locale can render the UTF-8 glyphs of the status output.
+aibox_utf8_locale() {
+    case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+        *UTF-8*|*utf-8*|*utf8*|*UTF8*) return 0 ;;
+    esac
+    return 1
+}
+
+# True when the standard output is a terminal able to show colours.
+aibox_color_terminal() {
+    [[ -t 1 ]] || return 1
+    [[ "${TERM:-}" != "dumb" ]] || return 1
+    aibox_utf8_locale
+}
+
+# aibox_status_dot <state>
+#   Availability marker of a service: a coloured dot on a terminal, nothing
+#   when the output is redirected (the state is then given as text).
+#   up -> green, down -> red, anything else -> dim.
+aibox_status_dot() {
+    local state="${1:-unknown}"
+    local esc=$'\033'
+    local color
+
+    aibox_color_terminal || return 0
+
+    case "$state" in
+        up) color="0;32" ;;
+        down) color="0;31" ;;
+        *) color="0;90" ;;
+    esac
+    printf '%s[%sm●%s[0m ' "$esc" "$color" "$esc"
+}
+
+# aibox_status_text <state>
+#   Availability state as text, used when the coloured dot is not shown.
+aibox_status_text() {
+    local state="${1:-unknown}"
+
+    aibox_color_terminal && return 0
+
+    case "$state" in
+        up) printf '  [up]' ;;
+        down) printf '  [down]' ;;
+        *) printf '  [unknown]' ;;
+    esac
+}
+
 prompt() {
     local prompt_text="$1"
     local default="$2"

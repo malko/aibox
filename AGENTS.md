@@ -16,6 +16,11 @@ This repository contains bash scripts for managing an AI development VM with KVM
   - `cmd/tunnel` - Tunnel lifecycle, LAN exposure and `status --json`; also
     probes the guest ports (one SSH round trip, cached) to report whether each
     service is really listening (`port_open`)
+  - `shared-funcs.sh` - Common helpers; `aibox_status_dot` prints the
+    availability dot (colours only on a UTF-8 terminal) and
+    `aibox_status_text` the plain-text state used when it is redirected
+  - `guest/configure-motd.sh` - Login banner; the dot colour follows the
+    guest port state (green/red/dim)
   - `cmd/` - Service and VM management commands
   - `web/` - Local web console (BusyBox httpd, CGI bash, vanilla HTML/CSS/JS)
     - `web/public/i18n.js` - Translation catalogs (`en` default, `fr`); static

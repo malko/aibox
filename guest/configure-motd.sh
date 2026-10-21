@@ -47,6 +47,47 @@ is_service_active() {
     systemctl --user is-active --quiet "$1" 2>/dev/null
 }
 
+# is_service_known <unit> -> success if the user unit exists (running or not).
+is_service_known() {
+    systemctl --user cat "$1" >/dev/null 2>&1
+}
+
+# port_open <port> -> success when something listens on 127.0.0.1:<port>.
+# The unit can be active while the service is not listening any more, so the
+# port is checked to tell a working service from a broken one.
+port_open() {
+    [ -n "$1" ] || return 1
+    if command -v bash >/dev/null 2>&1; then
+        bash -c "exec 3<>/dev/tcp/127.0.0.1/$1" 2>/dev/null && return 0
+        return 1
+    fi
+    if command -v nc >/dev/null 2>&1; then
+        nc -z -w 1 127.0.0.1 "$1" >/dev/null 2>&1
+        return $?
+    fi
+    # No way to check: assume the service answers.
+    return 0
+}
+
+# url_port <url> -> the port of a URL, empty when it has none.
+url_port() {
+    printf '%s' "$1" | sed -nE 's#^https?://[^:/]+:([0-9]+).*#\1#p'
+}
+
+# service_dot <port> -> green when the port answers, red when it does not,
+# dim when the port is unknown.
+service_dot() {
+    if [ -z "$1" ]; then
+        printf "%b" "${DIM}●${NC}"
+        return 0
+    fi
+    if port_open "$1"; then
+        printf "%b" "${GREEN}●${NC}"
+    else
+        printf "%b" "${RED}●${NC}"
+    fi
+}
+
 # service_journal <unit> -> the unit's journal since its last start.
 # Reading the whole journal of a verbose service (opencode) costs several
 # seconds at every login, so only the current run is read; the last 500 lines
@@ -87,11 +128,14 @@ if is_service_active opencode.service; then
     OPENCODE_PASSWORD=$(last_password opencode.service)
     if [ -n "$OPENCODE_URL" ]; then
         SHOWN=true
-        printf "%b\n" "  ${GREEN}●${NC} opencode      ${CYAN}${OPENCODE_URL}${NC}"
+        printf "%b\n" "  $(service_dot "$(url_port "$OPENCODE_URL")") opencode      ${CYAN}${OPENCODE_URL}${NC}"
         if [ -n "$OPENCODE_PASSWORD" ]; then
             printf "%b\n" "                  ${DIM}password:${NC} ${OPENCODE_PASSWORD}"
         fi
     fi
+elif is_service_known opencode.service; then
+    SHOWN=true
+    printf "%b\n" "  ${DIM}●${NC} opencode      ${DIM}not running${NC}"
 fi
 
 if is_service_active dsh-web.service; then
@@ -99,8 +143,11 @@ if is_service_active dsh-web.service; then
     DSH_URL=$(last_url dsh-web.service)
     if [ -n "$DSH_URL" ]; then
         SHOWN=true
-        printf "%b\n" "  ${GREEN}●${NC} dsh-web       ${CYAN}${DSH_URL}${NC}"
+        printf "%b\n" "  $(service_dot "$(url_port "$DSH_URL")") dsh-web       ${CYAN}${DSH_URL}${NC}"
     fi
+elif is_service_known dsh-web.service; then
+    SHOWN=true
+    printf "%b\n" "  ${DIM}●${NC} dsh-web       ${DIM}not running${NC}"
 fi
 
 # vscode-server runs as a Docker container (codercom/code-server).
@@ -109,8 +156,11 @@ if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' 2>/dev/n
     VSCODE_PORT=$(docker port vscode-server 8080/tcp 2>/dev/null | head -n 1 | sed 's/.*://')
     if [ -n "$VSCODE_PORT" ]; then
         SHOWN=true
-        printf "%b\n" "  ${GREEN}●${NC} vscode-server ${CYAN}http://localhost:${VSCODE_PORT}${NC}"
+        printf "%b\n" "  $(service_dot "$VSCODE_PORT") vscode-server ${CYAN}http://localhost:${VSCODE_PORT}${NC}"
     fi
+elif command -v docker >/dev/null 2>&1 && docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx vscode-server; then
+    SHOWN=true
+    printf "%b\n" "  ${DIM}●${NC} vscode-server ${DIM}not running${NC}"
 fi
 
 if [ "$SHOWN" = true ]; then
