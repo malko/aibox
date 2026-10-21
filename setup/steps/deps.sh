@@ -11,5 +11,5 @@ step_deps() {
         return 0
     fi
 
-    ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/install-deps.sh"
+    setup_guest_ssh '"$HOME/scripts/install-deps.sh"'
 }

@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/sudo-funcs.sh"
+
 TARGET="${1:-}"
 EXTRA="${2:-}"
 SCRIPTS_DIR="$HOME/scripts"
@@ -9,16 +12,6 @@ NVM_DIR="$HOME/.nvm"
 if [ -d "$NVM_DIR" ] && [ -s "$NVM_DIR/nvm.sh" ]; then
     \. "$NVM_DIR/nvm.sh"
 fi
-
-# sudo_cmd uses the password supplied by the host for non-interactive updates
-# (web UI). The CLI path has no SUDO_PASSWORD and keeps interactive sudo.
-sudo_cmd() {
-    if [[ -n "${SUDO_PASSWORD:-}" ]]; then
-        printf '%s\n' "$SUDO_PASSWORD" | sudo -S -p '' "$@"
-    else
-        sudo "$@"
-    fi
-}
 
 if [[ -z "$TARGET" ]]; then
     echo "Usage: $0 <target> [options]"

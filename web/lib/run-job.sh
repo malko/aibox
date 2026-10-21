@@ -20,6 +20,15 @@ sudo_password=""
 
 export AIBOX_WEB_JOB=1
 
+kill_process_tree() {
+    local pid="$1" child
+    [[ -n "$pid" ]] || return 0
+    for child in $(pgrep -P "$pid" 2>/dev/null); do
+        kill_process_tree "$child"
+    done
+    kill -TERM "$pid" 2>/dev/null || true
+}
+
 if [[ "$mode" == "secret" ]]; then
     IFS= read -r sudo_password || true
 fi
@@ -33,8 +42,8 @@ finish() {
 }
 
 cancel() {
-    if [[ -n "$child" ]] && kill -0 "$child" 2>/dev/null; then
-        kill -TERM "$child" 2>/dev/null || true
+    if [[ -n "$child" ]]; then
+        kill_process_tree "$child"
     fi
     printf 'cancelled\n' > "$job_dir/state"
     printf '143\n' > "$job_dir/exit"

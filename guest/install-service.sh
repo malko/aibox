@@ -1,5 +1,8 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/sudo-funcs.sh"
+
 USER_NAME="${USER:-$(whoami)}"
 HOME_DIR="/home/$USER_NAME"
 OPENCODE_PORT="${1:-4096}"
@@ -120,7 +123,7 @@ if loginctl show-user "$USER_NAME" 2>/dev/null | grep -q "Linger=yes"; then
     echo "==> Linger already enabled"
 else
     echo "==> Enabling linger (requires sudo)..."
-    sudo loginctl enable-linger "$USER_NAME"
+    sudo_cmd loginctl enable-linger "$USER_NAME"
 fi
 
 # Show the connection details opencode printed at startup. The password is

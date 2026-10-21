@@ -10,8 +10,12 @@ const state = {
   activeJob: null,
   jobTimer: null,
   jobLogEl: null,
+  jobDialogStatusEl: null,
+  jobDialogCloseBtn: null,
+  jobDialogKillBtn: null,
   lastError: "",
   quitting: false,
+  busy: false,
   sessionId: "",
 };
 
@@ -123,6 +127,9 @@ function closeDialog() {
   const dialog = $("#dialog");
   if (dialog.open) dialog.close();
   state.jobLogEl = null;
+  state.jobDialogStatusEl = null;
+  state.jobDialogCloseBtn = null;
+  state.jobDialogKillBtn = null;
 }
 
 function openDialog({ title, body, actions = [] }) {
@@ -159,7 +166,11 @@ function openDialog({ title, body, actions = [] }) {
   dialog.showModal();
 }
 
-function promptSudoPassword(target) {
+function promptSudoPassword({
+  title = "mot de passe sudo",
+  message = "Cette action nécessite les droits root dans la VM. Le mot de passe est transmis directement, jamais écrit sur disque ni journalisé.",
+  confirmLabel = "continuer",
+} = {}) {
   return new Promise((resolve) => {
     const dialog = $("#dialog");
     let settled = false;
@@ -177,21 +188,18 @@ function promptSudoPassword(target) {
       if (dialog.open) dialog.close();
       resolve(value);
     };
-    const message = target === "all"
-      ? "La mise à jour « tout » inclut les paquets OS et nécessite le mot de passe sudo de la VM. Il est transmis directement, jamais écrit sur disque ni journalisé."
-      : "La mise à jour OS nécessite le mot de passe sudo de la VM. Il est transmis directement, jamais écrit sur disque ni journalisé.";
     const body = el("div", {},
       el("p", { className: "hint", text: message }),
       field("mot de passe sudo", input),
     );
 
     openDialog({
-      title: "mise à jour de l'os",
+      title,
       body,
       actions: [
         { label: "annuler", onClick: () => finish(null) },
         {
-          label: "continuer",
+          label: confirmLabel,
           className: "btn-primary",
           onClick: () => {
             if (!input.value) {
@@ -329,6 +337,7 @@ function renderStatus(data) {
   renderOverviewServices(services);
   renderServices(services);
   renderSettings(config);
+  syncUpdateControls();
 }
 
 function statusPill(mode) {
@@ -337,24 +346,56 @@ function statusPill(mode) {
   return el("span", { className: "pill", text: "localhost" });
 }
 
-function serviceActions(service, compact = false) {
-  const actions = el("div", { className: "actions" });
-  const local = el("button", { className: "btn btn-sm", type: "button", text: "local" });
-  local.addEventListener("click", () => openService(service.name, "local"));
-  actions.append(local);
+function serviceUrlLink(service, target) {
+  const url = target === "lan" ? service.url_lan : service.url_local;
+  if (!url) return el("span", { className: "muted", text: "—" });
 
-  if (service.lan !== "local") {
-    const lan = el("button", { className: "btn btn-sm", type: "button", text: "lan" });
-    lan.addEventListener("click", () => openService(service.name, "lan"));
-    actions.append(lan);
+  const link = el("a", {
+    className: `url-link ${target}`,
+    href: url,
+    target: "_blank",
+    rel: "noopener",
+    text: url,
+  });
+
+  // dsh and opencode need a token/password fetched at click time.
+  if (service.name === "dsh" || service.name === "opencode") {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      openService(service.name, target);
+    });
   }
 
-  if (!compact) {
-    const edit = el("button", { className: "btn btn-sm btn-ghost", type: "button", text: "éditer" });
-    edit.addEventListener("click", () => openServiceDialog(service));
-    const remove = el("button", { className: "btn btn-sm btn-danger", type: "button", text: "supprimer" });
-    remove.addEventListener("click", () => removeService(service.name));
-    actions.append(edit, remove);
+  return link;
+}
+
+async function disableLan(name) {
+  try {
+    await api("lan", { method: "POST", body: { name, mode: "local" } });
+    toast(`accès LAN désactivé pour ${name}`);
+    await loadStatus({ quiet: true });
+  } catch (error) {
+    toast(error.message, true);
+    await loadStatus({ quiet: true });
+  }
+}
+
+function serviceActions(service) {
+  const actions = el("div", { className: "row-actions" });
+  const edit = el("button", { className: "btn btn-sm", type: "button", text: "éditer" });
+  edit.addEventListener("click", () => openServiceDialog(service));
+  actions.append(edit);
+
+  if (service.lan !== "local") {
+    const toggle = el("label", { className: "lan-toggle", title: "Désactiver l'accès LAN" });
+    const checkbox = el("input", { type: "checkbox", checked: true });
+    checkbox.addEventListener("change", async () => {
+      if (checkbox.checked) return;
+      checkbox.disabled = true;
+      await disableLan(service.name);
+    });
+    toggle.append(checkbox, el("span", { text: "lan" }));
+    actions.append(toggle);
   }
 
   return actions;
@@ -376,8 +417,8 @@ function renderOverviewServices(services) {
         el("td", { className: "name", text: service.name }),
         el("td", { className: "mono muted", text: service.port }),
         el("td", {}, statusPill(service.lan)),
-        el("td", { className: "url", text: service.url_local || "—" }),
-        el("td", {}, serviceActions(service, true)),
+        el("td", {}, serviceUrlLink(service, "local")),
+        el("td", {}, serviceUrlLink(service, "lan")),
       ),
     );
   }
@@ -388,23 +429,19 @@ function renderServices(services) {
   body.replaceChildren();
 
   if (services.length === 0) {
-    body.append(el("tr", {}, el("td", { className: "empty", colspan: "5", text: "aucun service configuré" })));
+    body.append(el("tr", {}, el("td", { className: "empty", colspan: "6", text: "aucun service configuré" })));
     return;
   }
 
   for (const service of services) {
-    const urls = el("div", { className: "url" },
-      el("div", { text: service.url_local || "—" }),
-      service.url_lan ? el("div", { className: "muted", text: service.url_lan }) : null,
-    );
-
     body.append(
       el("tr", {},
         el("td", { className: "name", text: service.name }),
         el("td", { className: "mono", text: service.port }),
         el("td", {}, statusPill(service.lan)),
-        el("td", {}, urls),
-        el("td", {}, serviceActions(service)),
+        el("td", {}, serviceUrlLink(service, "local")),
+        el("td", {}, serviceUrlLink(service, "lan")),
+        el("td", { className: "actions-cell" }, serviceActions(service)),
       ),
     );
   }
@@ -529,48 +566,61 @@ function openServiceDialog(service = null) {
     timeoutField,
   );
 
+  const actions = [];
+  if (editing) {
+    actions.push({
+      label: "supprimer",
+      className: "btn-danger",
+      onClick: async () => {
+        closeDialog();
+        await removeService(service.name);
+      },
+    });
+  }
+  actions.push(
+    { label: "annuler", onClick: closeDialog },
+    {
+      label: editing ? "enregistrer" : "ajouter",
+      className: "btn-primary",
+      onClick: async () => {
+        const name = nameInput.value.trim();
+        const port = portInput.value.trim();
+        const lan = lanSelect.value;
+        const timeout = timeoutInput.value.trim() || "2h";
+
+        if (!/^[A-Za-z0-9._-]+$/.test(name)) {
+          toast("nom invalide : lettres, chiffres, '.', '_' ou '-'", true);
+          return;
+        }
+        if (!/^[0-9]+(:[0-9]+)?$/.test(port)) {
+          toast("port invalide : 4096 ou 8080:9000", true);
+          return;
+        }
+
+        if (editing) {
+          await api("services/update", {
+            method: "POST",
+            body: { name: service.name, new_name: name, port, lan, timeout },
+          });
+          toast(`service ${name} mis à jour`);
+        } else {
+          await api("services/add", {
+            method: "POST",
+            body: { name, port, lan, timeout },
+          });
+          toast(`service ${name} ajouté`);
+        }
+
+        closeDialog();
+        await loadStatus({ quiet: true });
+      },
+    },
+  );
+
   openDialog({
     title: editing ? `éditer ${service.name}` : "ajouter un service",
     body: form,
-    actions: [
-      { label: "annuler", onClick: closeDialog },
-      {
-        label: editing ? "enregistrer" : "ajouter",
-        className: "btn-primary",
-        onClick: async () => {
-          const name = nameInput.value.trim();
-          const port = portInput.value.trim();
-          const lan = lanSelect.value;
-          const timeout = timeoutInput.value.trim() || "2h";
-
-          if (!/^[A-Za-z0-9._-]+$/.test(name)) {
-            toast("nom invalide : lettres, chiffres, '.', '_' ou '-'", true);
-            return;
-          }
-          if (!/^[0-9]+(:[0-9]+)?$/.test(port)) {
-            toast("port invalide : 4096 ou 8080:9000", true);
-            return;
-          }
-
-          if (editing) {
-            await api("services/update", {
-              method: "POST",
-              body: { name: service.name, new_name: name, port, lan, timeout },
-            });
-            toast(`service ${name} mis à jour`);
-          } else {
-            await api("services/add", {
-              method: "POST",
-              body: { name, port, lan, timeout },
-            });
-            toast(`service ${name} ajouté`);
-          }
-
-          closeDialog();
-          await loadStatus({ quiet: true });
-        },
-      },
-    ],
+    actions,
   });
 }
 
@@ -644,15 +694,26 @@ async function loadUpdates({ quiet = false } = {}) {
   }
 }
 
+function syncUpdateControls() {
+  const vmRunning = Boolean(state.status?.vm?.running);
+  const disabled = state.busy || !vmRunning;
+  const anySelected = $$("[data-update-target]").some((checkbox) => checkbox.checked);
+
+  $("#check-updates").disabled = disabled;
+  $("#apply-updates").disabled = disabled || !anySelected;
+  $("#update-all").disabled = disabled;
+  $$("[data-update-target]").forEach((checkbox) => {
+    checkbox.disabled = disabled;
+  });
+  $("#self-update").disabled = state.busy;
+}
+
 function renderUpdates(data) {
   const repo = data.repo || {};
   const vm = data.vm || {};
   const updates = vm.updates;
 
-  $("#check-updates").disabled = !vm.running;
-  $$("[data-update]").forEach((button) => {
-    button.disabled = !vm.running;
-  });
+  syncUpdateControls();
 
   if (!repo.is_git) {
     $("#update-repo").textContent = "non git";
@@ -696,16 +757,25 @@ async function checkUpdates() {
   }
 }
 
-async function applyUpdate(target) {
-  let sudoPassword = null;
+async function applySelectedUpdates() {
+  const targets = $$("[data-update-target]:checked").map((checkbox) => checkbox.dataset.updateTarget);
+  if (targets.length === 0) {
+    toast("sélectionne au moins une cible", true);
+    return;
+  }
 
-  if (target === "os" || target === "all") {
-    sudoPassword = await promptSudoPassword(target);
+  let sudoPassword = null;
+  if (targets.includes("os")) {
+    sudoPassword = await promptSudoPassword({
+      title: "mise à jour de l'os",
+      message: "La mise à jour OS nécessite le mot de passe sudo de la VM. Il est transmis directement, jamais écrit sur disque ni journalisé.",
+      confirmLabel: "mettre à jour",
+    });
     if (sudoPassword === null) return;
   }
 
   try {
-    const body = { target };
+    const body = { targets };
     if (sudoPassword !== null) body.sudo_password = sudoPassword;
     const data = await api("updates/apply", { method: "POST", body });
     startJob(data, { reload: "updates" });
@@ -788,11 +858,23 @@ function renderSetup(data) {
 
 async function runSetup(step) {
   const withDeps = $("#setup-with-deps").checked;
-  try {
-    const data = await api("setup/run", {
-      method: "POST",
-      body: { step, with_deps: withDeps },
+  const info = (state.setup?.steps || []).find((item) => item.name === step);
+  const needsSudo = info && (info.needs_sudo || (withDeps && info.needs_sudo_with_deps));
+  let sudoPassword = null;
+
+  if (needsSudo) {
+    sudoPassword = await promptSudoPassword({
+      title: `installation : ${step}`,
+      message: "Cette étape nécessite les droits root dans la VM. Le mot de passe est transmis directement, jamais écrit sur disque ni journalisé.",
+      confirmLabel: "lancer",
     });
+    if (sudoPassword === null) return;
+  }
+
+  try {
+    const body = { step, with_deps: withDeps };
+    if (sudoPassword !== null) body.sudo_password = sudoPassword;
+    const data = await api("setup/run", { method: "POST", body });
     startJob(data, { reload: "setup" });
   } catch (error) {
     toast(error.message, true);
@@ -879,6 +961,8 @@ function startJob(response, options = {}) {
     reload: options.reload || "all",
     done: false,
   };
+  state.busy = true;
+  syncUpdateControls();
 
   $("#active-job-panel").hidden = false;
   $("#active-job-title").textContent = state.activeJob.title;
@@ -900,7 +984,16 @@ async function pollJob() {
       state.jobLogEl.scrollTop = state.jobLogEl.scrollHeight;
     }
 
-    $("#active-job-state").textContent = `${jobStateLabel(data.state)}${data.exit !== null ? ` (code ${data.exit})` : ""}`;
+    const progressLabel = `${jobStateLabel(data.state)}${data.exit !== null ? ` (code ${data.exit})` : ""}`;
+    $("#active-job-state").textContent = progressLabel;
+    if (state.jobDialogStatusEl) {
+      state.jobDialogStatusEl.textContent = progressLabel;
+      state.jobDialogStatusEl.className = `job-dialog-status ${data.state}`;
+    }
+    if (data.state !== "running") {
+      if (state.jobDialogCloseBtn) state.jobDialogCloseBtn.textContent = "fermer";
+      if (state.jobDialogKillBtn) state.jobDialogKillBtn.disabled = true;
+    }
 
     if (data.state === "running") {
       state.jobTimer = setTimeout(pollJob, 1000);
@@ -919,32 +1012,64 @@ async function pollJob() {
 
     const reload = state.activeJob.reload;
     state.activeJob = null;
+    state.busy = false;
+    syncUpdateControls();
 
     await loadStatus({ quiet: true });
     if (reload === "updates" || reload === "all") await loadUpdates({ quiet: true });
     if (reload === "setup" || reload === "all") await loadSetup({ quiet: true });
   } catch (error) {
     state.activeJob.done = true;
+    state.busy = false;
     $("#active-job-bar").style.display = "none";
     $("#active-job-panel").hidden = true;
+    syncUpdateControls();
+    toast(error.message, true);
+  }
+}
+
+async function cancelActiveJob() {
+  if (!state.activeJob) return;
+  const confirmed = await confirmDialog(
+    "arrêter l'opération",
+    "Le processus en cours va être interrompu. Certaines opérations peuvent laisser la VM ou un service dans un état intermédiaire.",
+    "kill",
+    true,
+  );
+  if (!confirmed) return;
+
+  try {
+    await api("job/cancel", { method: "POST", body: { id: state.activeJob.id } });
+    toast("opération interrompue");
+  } catch (error) {
     toast(error.message, true);
   }
 }
 
 function openJobDialog(job) {
+  const status = el("div", { className: "job-dialog-status running", text: "en cours…" });
   const pre = el("pre", { text: "en attente de sortie…" });
   state.jobLogEl = pre;
+  state.jobDialogStatusEl = status;
 
   openDialog({
     title: job.title,
-    body: pre,
+    body: el("div", {}, status, pre),
     actions: [
+      {
+        label: "kill",
+        className: "btn-danger",
+        onClick: cancelActiveJob,
+      },
       {
         label: "masquer",
         onClick: closeDialog,
       },
     ],
   });
+
+  state.jobDialogKillBtn = $("#dialog-actions button:first-child");
+  state.jobDialogCloseBtn = $("#dialog-actions button:last-child");
 }
 
 /* Tabs -------------------------------------------------------------------- */
@@ -980,6 +1105,7 @@ function initEvents() {
   $("#add-service").addEventListener("click", () => openServiceDialog());
   $("#check-updates").addEventListener("click", checkUpdates);
   $("#self-update").addEventListener("click", selfUpdate);
+  $("#apply-updates").addEventListener("click", applySelectedUpdates);
   $("#quit-web").addEventListener("click", quitWeb);
   $("#quit-web-top").addEventListener("click", quitWeb);
   $("#dialog-close").addEventListener("click", closeDialog);
@@ -990,8 +1116,20 @@ function initEvents() {
   $$("[data-tunnel]").forEach((button) => {
     button.addEventListener("click", () => tunnelAction(button.dataset.tunnel));
   });
-  $$("[data-update]").forEach((button) => {
-    button.addEventListener("click", () => applyUpdate(button.dataset.update));
+
+  const updateCheckboxes = $$("[data-update-target]");
+  const updateAll = $("#update-all");
+  updateAll.addEventListener("change", () => {
+    updateCheckboxes.forEach((checkbox) => {
+      checkbox.checked = updateAll.checked;
+    });
+    syncUpdateControls();
+  });
+  updateCheckboxes.forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      updateAll.checked = updateCheckboxes.every((item) => item.checked);
+      syncUpdateControls();
+    });
   });
 
   $("#settings-form").addEventListener("submit", (event) => {
@@ -1006,6 +1144,7 @@ function initEvents() {
   $("#active-job-log").addEventListener("click", () => {
     if (state.activeJob) openJobDialog(state.activeJob);
   });
+  $("#active-job-cancel").addEventListener("click", cancelActiveJob);
 
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) loadStatus({ quiet: true });

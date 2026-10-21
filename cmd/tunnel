@@ -303,6 +303,7 @@ tunnel_status_json() {
             vm: {
                 name: $vm_name,
                 exists: $vm_exists,
+                running: ($vm_state == "running"),
                 state: $vm_state,
                 ip: (if $vm_ip == "" then null else $vm_ip end)
             },

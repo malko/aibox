@@ -24,6 +24,7 @@ print_info "=== Upload Scripts to VM ==="
 
 scp -o ConnectTimeout=10 \
     "$SCRIPT_DIR/shared-funcs.sh" \
+    "$SCRIPT_DIR/guest/sudo-funcs.sh" \
     "$SCRIPT_DIR/guest/install-deps.sh" \
     "$SCRIPT_DIR/guest/install-docker.sh" \
     "$SCRIPT_DIR/guest/install-service.sh" \

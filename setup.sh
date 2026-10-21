@@ -118,6 +118,12 @@ fi
 
 check_requirements virsh
 
+# The web job runner feeds the sudo password on stdin, in memory only.
+AIBOX_SUDO_PASSWORD=""
+if [[ "${AIBOX_WEB_JOB:-0}" == "1" ]]; then
+    IFS= read -r AIBOX_SUDO_PASSWORD || true
+fi
+
 if [[ "$ASSUME_YES" == "true" ]]; then
     export AIBOX_ASSUME_YES=1
 fi

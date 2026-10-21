@@ -187,6 +187,16 @@ validate_hostname() {
 
 # --- Jobs ------------------------------------------------------------------
 
+kill_process_tree() {
+    local pid="$1" child
+
+    [[ -n "$pid" ]] || return 0
+    for child in $(pgrep -P "$pid" 2>/dev/null); do
+        kill_process_tree "$child"
+    done
+    kill -TERM "$pid" 2>/dev/null || true
+}
+
 job_dir_for() {
     printf '%s/%s\n' "$AIBOX_WEB_JOBS_DIR" "$1"
 }
@@ -227,7 +237,7 @@ job_acquire_lock() {
     return 1
 }
 
-job_start() {
+job_start_raw() {
     local title="$1"
     shift
 
@@ -248,15 +258,21 @@ job_start() {
     # command line, the job metadata or the log.
     if [[ -n "${AIBOX_JOB_PASSWORD:-}" ]]; then
         printf '%s\n' "$AIBOX_JOB_PASSWORD" | \
-            nohup "$AIBOX_ROOT/web/lib/run-job.sh" secret "$job_dir" "$AIBOX_BIN" "$@" \
+            nohup "$AIBOX_ROOT/web/lib/run-job.sh" secret "$job_dir" "$@" \
                 >/dev/null 2>&1 &
         unset AIBOX_JOB_PASSWORD
     else
-        nohup "$AIBOX_ROOT/web/lib/run-job.sh" nosecret "$job_dir" "$AIBOX_BIN" "$@" \
+        nohup "$AIBOX_ROOT/web/lib/run-job.sh" nosecret "$job_dir" "$@" \
             >/dev/null 2>&1 < /dev/null &
     fi
 
     json_response "$(jq -n --arg id "$id" --arg title "$title" '{ok:true,id:$id,title:$title}')"
+}
+
+job_start() {
+    local title="$1"
+    shift
+    job_start_raw "$title" "$AIBOX_BIN" "$@"
 }
 
 job_status() {
@@ -312,8 +328,8 @@ job_cancel() {
     fi
 
     child=$(cat "$job_dir/child" 2>/dev/null || true)
-    if [[ -n "$child" ]] && kill -0 "$child" 2>/dev/null; then
-        kill -TERM "$child" 2>/dev/null || true
+    if [[ -n "$child" ]]; then
+        kill_process_tree "$child"
     fi
 
     pid=$(cat "$job_dir/pid" 2>/dev/null || true)
@@ -339,8 +355,8 @@ job_cancel_all() {
         [[ "$state" == "running" ]] || continue
 
         child=$(cat "$dir/child" 2>/dev/null || true)
-        if [[ -n "$child" ]] && kill -0 "$child" 2>/dev/null; then
-            kill -TERM "$child" 2>/dev/null || true
+        if [[ -n "$child" ]]; then
+            kill_process_tree "$child"
         fi
 
         pid=$(cat "$dir/pid" 2>/dev/null || true)

@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/sudo-funcs.sh"
+
 DSH_PORT="${1:-3080}"
 
 USER_NAME="${USER:-$(whoami)}"
@@ -100,7 +103,7 @@ if loginctl show-user "$USER_NAME" 2>/dev/null | grep -q "Linger=yes"; then
     echo "==> Linger already enabled"
 else
     echo "==> Enabling linger (requires sudo)..."
-    sudo loginctl enable-linger "$USER_NAME"
+    sudo_cmd loginctl enable-linger "$USER_NAME"
 fi
 
 echo ""

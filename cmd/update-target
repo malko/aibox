@@ -81,14 +81,19 @@ run_target() {
 
     echo "connecting to aibox..."
 
+    # Make sure the guest OS update script and its sudo helper are current,
+    # even when the user has not run 'aibox update scripts' since the last
+    # host update.
+    if [[ "$target" == "os" ]]; then
+        scp -q -o ConnectTimeout=10 \
+            "$SCRIPT_DIR/guest/update-target.sh" \
+            "$SCRIPT_DIR/guest/sudo-funcs.sh" \
+            "$GUEST_USER@$GUEST_IP:~/scripts/" 2>/dev/null || true
+    fi
+
     # The web UI has no terminal: feed the guest sudo password on stdin and
     # use 'sudo -S' inside the guest. The CLI keeps the interactive SSH path.
     if [[ "$target" == "os" && -n "$SUDO_PASSWORD" ]]; then
-        # Make sure the guest script knows about sudo_cmd, even when the user
-        # has not run 'aibox update scripts' since the last host update.
-        scp -q -o ConnectTimeout=10 "$SCRIPT_DIR/guest/update-target.sh" \
-            "$GUEST_USER@$GUEST_IP:~/scripts/" 2>/dev/null || true
-
         printf '%s\n' "$SUDO_PASSWORD" | \
             ssh -T -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" \
                 'IFS= read -r SUDO_PASSWORD; . "$HOME/scripts/update-target.sh" os '"${EXTRA_ARGS[*]}"

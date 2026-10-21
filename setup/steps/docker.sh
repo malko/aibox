@@ -17,5 +17,5 @@ step_docker() {
         return 0
     fi
 
-    ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/install-docker.sh"
+    setup_guest_ssh '"$HOME/scripts/install-docker.sh"'
 }

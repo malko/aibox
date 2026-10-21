@@ -213,9 +213,12 @@ The console provides:
 - VM lifecycle: start, restart, shutdown (with optional force);
 - tunnel state and controls;
 - service list, add/edit/remove, per-service LAN exposure and links;
-- update check and per-target updates; OS updates ask for the guest sudo
-  password, which is transmitted through pipes and never written to disk;
-- setup status detection and replay of safe setup steps;
+- update check and a multi-target update selection; OS updates ask for the
+  guest sudo password, which is transmitted through pipes and never written to
+  disk;
+- setup status detection and replay of safe setup steps; steps that need root
+  ask for the same sudo password;
+- running operations show their log and can be killed from the console;
 - LAN hostname setting for service URLs.
 
 The access token is stored in `~/.config/aibox/web-token` (mode `600`) and is
@@ -353,6 +356,10 @@ aibox setup motd              # Same, through the main CLI
 Steps (in order): `vm`, `ssh`, `scripts`, `deps`, `sshd`, `git`, `dirs`,
 `hosts`, `motd`, `docker`, `vscode`, `opencode`, `dsh`, `claude`, `update-check`,
 `virtiofs`, `cli`, `tunnel`. Each step is implemented in `setup/steps/`.
+
+The `cli` step is host-only: it links `aibox` into `~/bin`, adds `~/bin` to
+`PATH` when needed, and installs bash/zsh completion. It does not modify the VM
+and does not need root.
 
 Answers are stored in the config file and reused as defaults; a step only
 prompts for the values it needs.

@@ -3,6 +3,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/shared-funcs.sh"
+source "$SCRIPT_DIR/sudo-funcs.sh"
 
 print_info "=== Install AIBOX MOTD ==="
 
@@ -154,15 +155,15 @@ MOTD_CONTENT=${MOTD_CONTENT//@AIBOX_LOGO_TC@/$AIBOX_LOGO_TC}
 MOTD_CONTENT=${MOTD_CONTENT//@AIBOX_LOGO_256@/$AIBOX_LOGO_256}
 printf '%s\n' "$MOTD_CONTENT" > /tmp/motd.sh
 
-sudo cp /tmp/motd.sh /etc/profile.d/motd.sh
-sudo chmod +x /etc/profile.d/motd.sh
+sudo_cmd cp /tmp/motd.sh /etc/profile.d/motd.sh
+sudo_cmd chmod +x /etc/profile.d/motd.sh
 
 # zsh does not read /etc/profile.d: hook the MOTD into its login startup.
 ZSH_PROFILE=/etc/zsh/zprofile
 if [ -f "$ZSH_PROFILE" ] && ! grep -q 'aibox MOTD' "$ZSH_PROFILE"; then
     print_info "Hooking the MOTD into $ZSH_PROFILE (zsh)"
-    printf '\n# aibox MOTD (zsh does not read /etc/profile.d)\n[ -r /etc/profile.d/motd.sh ] && . /etc/profile.d/motd.sh\n' \
-        | sudo tee -a "$ZSH_PROFILE" > /dev/null
+    sudo_cmd sh -c 'printf "\n# aibox MOTD (zsh does not read /etc/profile.d)\n[ -r /etc/profile.d/motd.sh ] && . /etc/profile.d/motd.sh\n" >> "$1"' _ \
+        "$ZSH_PROFILE"
 fi
 
 print_success "AIBOX MOTD configured!"

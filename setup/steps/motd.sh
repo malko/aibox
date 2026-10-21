@@ -11,5 +11,5 @@ step_motd() {
         return 0
     fi
 
-    ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/configure-motd.sh"
+    setup_guest_ssh '"$HOME/scripts/configure-motd.sh"'
 }

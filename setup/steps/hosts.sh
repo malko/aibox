@@ -17,6 +17,5 @@ step_hosts() {
         return 0
     fi
 
-    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" \
-        "echo '192.168.122.1    aibox-host' | sudo tee -a /etc/hosts"
+    setup_guest_ssh '. "$HOME/scripts/sudo-funcs.sh"; sudo_cmd sh -c '\''printf "%s\n" "$1" >> /etc/hosts'\'' _ "192.168.122.1    aibox-host"'
 }

@@ -15,10 +15,10 @@ step_dsh() {
     save_config "DSH_PORT" "$DSH_PORT"
 
     print_info "Installing dsh..."
-    ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/install-dsh.sh"
+    setup_guest_ssh '"$HOME/scripts/install-dsh.sh"'
 
     print_info "Installing dsh-web service..."
-    ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "source ~/.bashrc && ~/scripts/install-dsh-service.sh $DSH_PORT"
+    setup_guest_ssh 'source "$HOME/.bashrc" && "$HOME/scripts/install-dsh-service.sh" '"$DSH_PORT"
 
     source "$SCRIPT_DIR/services-funcs.sh"
     if ! service_exists dsh; then

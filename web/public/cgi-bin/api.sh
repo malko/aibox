@@ -274,36 +274,55 @@ $("$AIBOX_BIN" tunnel lan on "$target_name" --timeout "$TIMEOUT" --yes 2>>"$erro
 
     "POST updates/apply")
         cgi_json_body || exit 0
-        TARGET=$(printf '%s' "$CGI_BODY" | jq -r '.target // empty')
+        TARGETS_JSON=$(printf '%s' "$CGI_BODY" | jq -c '.targets // empty')
         SUDO_PASSWORD=$(printf '%s' "$CGI_BODY" | jq -r '.sudo_password // empty')
+        TARGETS=()
 
-        case "$TARGET" in
-            scripts|opencode|opencode-service|dsh|claude|vscode-server)
-                job_start "Mise à jour: $TARGET" update "$TARGET" || exit 0
-                ;;
-            os)
-                if [[ -z "$SUDO_PASSWORD" ]]; then
-                    json_error "400 Bad Request" "sudo password is required for OS updates"
-                    exit 0
-                fi
-                AIBOX_JOB_PASSWORD="$SUDO_PASSWORD"
-                job_start "Mise à jour: OS" update os -y || exit 0
-                unset AIBOX_JOB_PASSWORD
-                ;;
-            all)
-                if [[ -z "$SUDO_PASSWORD" ]]; then
-                    json_error "400 Bad Request" "sudo password is required for OS updates"
-                    exit 0
-                fi
-                AIBOX_JOB_PASSWORD="$SUDO_PASSWORD"
-                job_start "Mise à jour: tout" update all -y || exit 0
-                unset AIBOX_JOB_PASSWORD
-                ;;
-            *)
-                json_error "400 Bad Request" "invalid update target"
+        if [[ -n "$TARGETS_JSON" && "$TARGETS_JSON" != "null" && "$TARGETS_JSON" != "[]" ]]; then
+            if ! printf '%s' "$TARGETS_JSON" | jq -e 'type == "array"' >/dev/null 2>&1; then
+                json_error "400 Bad Request" "targets must be an array"
                 exit 0
-                ;;
-        esac
+            fi
+            while IFS= read -r target; do
+                [[ -n "$target" ]] && TARGETS+=("$target")
+            done < <(printf '%s' "$TARGETS_JSON" | jq -r '.[]')
+        else
+            TARGET=$(printf '%s' "$CGI_BODY" | jq -r '.target // empty')
+            if [[ "$TARGET" == "all" ]]; then
+                TARGETS=(scripts os opencode dsh claude vscode-server)
+            elif [[ -n "$TARGET" ]]; then
+                TARGETS=("$TARGET")
+            fi
+        fi
+
+        if [[ ${#TARGETS[@]} -eq 0 ]]; then
+            json_error "400 Bad Request" "no update target selected"
+            exit 0
+        fi
+
+        HAS_OS=false
+        for target in "${TARGETS[@]}"; do
+            case "$target" in
+                scripts|os|opencode|opencode-service|dsh|claude|vscode-server) ;;
+                *)
+                    json_error "400 Bad Request" "invalid update target: $target"
+                    exit 0
+                    ;;
+            esac
+            [[ "$target" == "os" ]] && HAS_OS=true
+        done
+
+        if [[ "$HAS_OS" == "true" && -z "$SUDO_PASSWORD" ]]; then
+            json_error "400 Bad Request" "sudo password is required for OS updates"
+            exit 0
+        fi
+
+        args=(bash "$AIBOX_ROOT/web/lib/run-updates.sh" "$AIBOX_BIN" "${TARGETS[@]}")
+        if [[ -n "$SUDO_PASSWORD" ]]; then
+            AIBOX_JOB_PASSWORD="$SUDO_PASSWORD"
+        fi
+        job_start_raw "Mise à jour: ${TARGETS[*]}" "${args[@]}" || exit 0
+        unset AIBOX_JOB_PASSWORD
         ;;
 
     "POST self-update")
@@ -314,6 +333,7 @@ $("$AIBOX_BIN" tunnel lan on "$target_name" --timeout "$TIMEOUT" --yes 2>>"$erro
         cgi_json_body || exit 0
         STEP=$(printf '%s' "$CGI_BODY" | jq -r '.step // empty')
         WITH_DEPS=$(printf '%s' "$CGI_BODY" | jq -r '.with_deps // false')
+        SUDO_PASSWORD=$(printf '%s' "$CGI_BODY" | jq -r '.sudo_password // empty')
 
         if [[ -z "$STEP" || ! "$STEP" =~ ^[a-z][a-z0-9-]*$ ]]; then
             json_error "400 Bad Request" "invalid setup step"
@@ -342,9 +362,30 @@ $("$AIBOX_BIN" tunnel lan on "$target_name" --timeout "$TIMEOUT" --yes 2>>"$erro
             exit 0
         fi
 
+        needs_sudo=$(printf '%s' "$status_json" | jq -r --arg step "$STEP" \
+            '.steps[] | select(.name == $step) | .needs_sudo // false')
+        needs_sudo_with_deps=$(printf '%s' "$status_json" | jq -r --arg step "$STEP" \
+            '.steps[] | select(.name == $step) | .needs_sudo_with_deps // false')
+
+        require_sudo=false
+        [[ "$needs_sudo" == "true" ]] && require_sudo=true
+        [[ "$WITH_DEPS" == "true" && "$needs_sudo_with_deps" == "true" ]] && require_sudo=true
+
+        if [[ "$require_sudo" == "true" && -z "$SUDO_PASSWORD" ]]; then
+            json_error "400 Bad Request" "sudo password is required for this setup step"
+            exit 0
+        fi
+
         args=(setup "$STEP" --yes --no-banner)
         [[ "$WITH_DEPS" != "true" ]] && args+=(--no-deps)
-        job_start "Setup: $STEP" "${args[@]}" || exit 0
+
+        if [[ "$require_sudo" == "true" ]]; then
+            AIBOX_JOB_PASSWORD="$SUDO_PASSWORD"
+            job_start "Setup: $STEP" "${args[@]}" || exit 0
+            unset AIBOX_JOB_PASSWORD
+        else
+            job_start "Setup: $STEP" "${args[@]}" || exit 0
+        fi
         ;;
 
     "GET job")

@@ -12,8 +12,11 @@
 <div class="shell">
   <header class="masthead">
     <div class="brand">
-      <span class="brand-name">AIBOX</span>
-      <span class="brand-sub">// console locale</span>
+      <div class="brand-main">
+        <span class="brand-name">AIBOX</span>
+        <span class="brand-sub">// console locale</span>
+      </div>
+      <div class="brand-tagline">your AI, in its own box</div>
     </div>
     <div class="masthead-status">
       <span class="badge" id="vm-badge">VM <b>—</b></span>
@@ -83,7 +86,7 @@
         <div class="table-wrap">
           <table class="table">
             <thead>
-              <tr><th>nom</th><th>port</th><th>lan</th><th>url locale</th><th></th></tr>
+              <tr><th>nom</th><th>port</th><th>lan</th><th>localhost</th><th>lan</th></tr>
             </thead>
             <tbody id="overview-services"></tbody>
           </table>
@@ -93,7 +96,10 @@
       <section class="panel" id="active-job-panel" hidden>
         <div class="panel-head">
           <h2 id="active-job-title">opération en cours</h2>
-          <button class="btn btn-ghost" id="active-job-log">voir le journal</button>
+          <div class="actions">
+            <button class="btn btn-ghost" id="active-job-log">voir le journal</button>
+            <button class="btn btn-danger" id="active-job-cancel">kill</button>
+          </div>
         </div>
         <div class="progress"><span id="active-job-bar"></span></div>
         <p class="mono muted" id="active-job-state">—</p>
@@ -112,7 +118,7 @@
       <div class="table-wrap">
         <table class="table">
           <thead>
-            <tr><th>nom</th><th>hôte:invité</th><th>lan</th><th>url</th><th>actions</th></tr>
+            <tr><th>nom</th><th>hôte:invité</th><th>lan</th><th>localhost</th><th>lan</th><th class="actions-cell">actions</th></tr>
           </thead>
           <tbody id="services-body"></tbody>
         </table>
@@ -149,16 +155,19 @@
           <h2>appliquer</h2>
           <button class="btn btn-ghost" id="self-update">mettre à jour aibox</button>
         </div>
-        <div class="actions wrap" id="update-actions">
-          <button class="btn" data-update="scripts">scripts</button>
-          <button class="btn" data-update="os">os</button>
-          <button class="btn" data-update="opencode">opencode</button>
-          <button class="btn" data-update="dsh">dsh</button>
-          <button class="btn" data-update="claude">claude</button>
-          <button class="btn" data-update="vscode-server">vscode-server</button>
-          <button class="btn btn-primary" data-update="all">tout</button>
+        <div class="update-selection" id="update-actions">
+          <label class="select-chip"><input type="checkbox" data-update-target="scripts"> scripts</label>
+          <label class="select-chip"><input type="checkbox" data-update-target="os"> os</label>
+          <label class="select-chip"><input type="checkbox" data-update-target="opencode"> opencode</label>
+          <label class="select-chip"><input type="checkbox" data-update-target="dsh"> dsh</label>
+          <label class="select-chip"><input type="checkbox" data-update-target="claude"> claude</label>
+          <label class="select-chip"><input type="checkbox" data-update-target="vscode-server"> vscode-server</label>
+          <label class="select-chip select-all"><input type="checkbox" id="update-all"> tout</label>
         </div>
-        <p class="hint">Une mise à jour « os » ou « tout » est lancée en mode non interactif. Les logs s'ouvrent dans le panneau d'opération.</p>
+        <div class="actions">
+          <button class="btn btn-primary" id="apply-updates">mettre à jour la sélection</button>
+        </div>
+        <p class="hint">Les cibles sélectionnées sont mises à jour dans l'ordre, en s'arrêtant à la première erreur. Une mise à jour « os » est lancée en mode non interactif et demande le mot de passe sudo.</p>
       </section>
     </section>
 

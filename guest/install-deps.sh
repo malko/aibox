@@ -3,12 +3,13 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/shared-funcs.sh"
+source "$SCRIPT_DIR/sudo-funcs.sh"
 
 print_info "=== Install Dependencies ==="
 
 echo "Updating packages..."
-sudo apt update
-sudo apt install -y curl jq netcat-openbsd git qemu-guest-agent shellcheck
+sudo_cmd apt update
+sudo_cmd apt install -y curl jq netcat-openbsd git qemu-guest-agent shellcheck
 
 if ! command -v nvm &>/dev/null && [ ! -d "$HOME/.nvm" ]; then
     echo "Installing nvm..."

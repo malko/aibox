@@ -3,17 +3,19 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/shared-funcs.sh"
+source "$SCRIPT_DIR/sudo-funcs.sh"
 
 print_info "=== Configure Virtiofs (Guest) ==="
 
 if ! grep -q "gitshare" /etc/fstab; then
-    echo "gitshare /home/$USER/git virtiofs defaults,x-guest 0 0" | sudo tee -a /etc/fstab
+    sudo_cmd sh -c 'printf "%s\n" "$1" >> /etc/fstab' _ \
+        "gitshare /home/$USER/git virtiofs defaults,x-guest 0 0"
 fi
 
-sudo mkdir -p /home/$USER/git
-sudo chown $USER:$USER /home/$USER/git
+sudo_cmd mkdir -p "/home/$USER/git"
+sudo_cmd chown "$USER:$USER" "/home/$USER/git"
 
-sudo mount -a || true
+sudo_cmd mount -a || true
 
 echo "Virtiofs mount configured!"
 

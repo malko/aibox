@@ -68,7 +68,7 @@ declare -A SETUP_STEP_DESC=(
     [claude]="Install Claude Code"
     [update-check]="Install the automatic update check"
     [virtiofs]="Configure the virtiofs git share with the host"
-    [cli]="Install the 'aibox' command and shell completion on the host"
+    [cli]="Link 'aibox' into ~/bin and enable shell completion"
     [tunnel]="Install the tunnel user service on the host"
 )
 
@@ -105,6 +105,60 @@ setup_ensure_guest_reachable() {
     if ! nc -z -w 1 "$GUEST_IP" 22 &>/dev/null; then
         print_error "SSH to $GUEST_USER@$GUEST_IP is not responding."
         return 1
+    fi
+}
+
+# Make sure the two shared guest helpers exist even when the web UI runs a
+# single step with --no-deps (for example 'motd' without the 'scripts' step).
+setup_ensure_guest_helpers() {
+    [[ "${SETUP_GUEST_HELPERS_READY:-false}" == "true" ]] && return 0
+
+    # A web setup job always pushes the current scripts once, so a replayed
+    # step never runs an old guest script from a previous aibox version.
+    if [[ "${AIBOX_WEB_JOB:-0}" == "1" && "${SETUP_GUEST_SCRIPTS_UPLOADED:-false}" != "true" ]]; then
+        "$SCRIPT_DIR/host/upload-scripts.sh" "$VM_NAME" "$GUEST_IP" "$GUEST_USER" >/dev/null 2>&1 || true
+        SETUP_GUEST_SCRIPTS_UPLOADED=true
+        SETUP_GUEST_HELPERS_READY=true
+        return 0
+    fi
+
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$GUEST_USER@$GUEST_IP" \
+        'test -f "$HOME/scripts/update-target.sh"' 2>/dev/null; then
+        "$SCRIPT_DIR/host/upload-scripts.sh" "$VM_NAME" "$GUEST_IP" "$GUEST_USER" >/dev/null 2>&1 || true
+        SETUP_GUEST_HELPERS_READY=true
+        return 0
+    fi
+
+    if ssh -o BatchMode=yes -o ConnectTimeout=5 "$GUEST_USER@$GUEST_IP" \
+        'test -f "$HOME/scripts/shared-funcs.sh" && test -f "$HOME/scripts/sudo-funcs.sh"' 2>/dev/null; then
+        SETUP_GUEST_HELPERS_READY=true
+        return 0
+    fi
+
+    ssh -o ConnectTimeout=5 "$GUEST_USER@$GUEST_IP" 'mkdir -p "$HOME/scripts"' 2>/dev/null || true
+    if scp -q -o ConnectTimeout=10 \
+        "$SCRIPT_DIR/shared-funcs.sh" \
+        "$SCRIPT_DIR/guest/sudo-funcs.sh" \
+        "$GUEST_USER@$GUEST_IP:~/scripts/" 2>/dev/null; then
+        SETUP_GUEST_HELPERS_READY=true
+    fi
+}
+
+# setup_guest_ssh <remote-command>
+# Runs a command in the guest. When a sudo password was supplied by the web
+# UI, it is fed on stdin and exported as SUDO_PASSWORD for sudo-funcs.sh.
+# The CLI path keeps the interactive ssh -t -t behaviour.
+setup_guest_ssh() {
+    local command="$1"
+
+    setup_ensure_guest_helpers
+
+    if [[ -n "${AIBOX_SUDO_PASSWORD:-}" ]]; then
+        printf '%s\n' "$AIBOX_SUDO_PASSWORD" | \
+            ssh -T -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" \
+                'IFS= read -r SUDO_PASSWORD; export SUDO_PASSWORD; '"$command"
+    else
+        ssh -t -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "$command"
     fi
 }
 

@@ -40,6 +40,23 @@ status_is_configured_off() {
     [[ "$(get_config "$key" "")" == "no" ]]
 }
 
+status_self_needs_sudo() {
+    case "$1" in
+        deps|sshd|hosts|motd|docker|opencode|dsh) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+status_needs_sudo_with_deps() {
+    local step="$1" dep
+
+    status_self_needs_sudo "$step" && return 0
+    for dep in ${SETUP_STEP_DEPS[$step]:-}; do
+        status_needs_sudo_with_deps "$dep" && return 0
+    done
+    return 1
+}
+
 status_is_web_runnable() {
     case "$1" in
         vm|ssh|vscode|virtiofs) return 1 ;;
@@ -211,25 +228,33 @@ status_collect() {
 setup_status_json() {
     status_collect
 
-    local tmp step web_json reason
+    local tmp step web_json reason needs_sudo
     tmp=$(mktemp) || return 1
 
     for step in "${SETUP_STEP_ORDER[@]}"; do
         web_json=false
         [[ "${STATUS_WEB_RUNNABLE[$step]:-false}" == "true" ]] && web_json=true
         reason="${STATUS_STEP_REASON[$step]:-}"
+        needs_sudo=false
+        needs_sudo_with_deps=false
+        status_self_needs_sudo "$step" && needs_sudo=true
+        status_needs_sudo_with_deps "$step" && needs_sudo_with_deps=true
 
         jq -n \
             --arg name "$step" \
             --arg description "${SETUP_STEP_DESC[$step]}" \
             --arg status "${STATUS_STEP_STATUS[$step]}" \
             --argjson web_runnable "$web_json" \
+            --argjson needs_sudo "$needs_sudo" \
+            --argjson needs_sudo_with_deps "$needs_sudo_with_deps" \
             --arg reason "$reason" \
             '{
                 name: $name,
                 description: $description,
                 status: $status,
                 web_runnable: $web_runnable,
+                needs_sudo: $needs_sudo,
+                needs_sudo_with_deps: $needs_sudo_with_deps,
                 reason: (if $reason == "" then null else $reason end)
             }' >> "$tmp"
     done
