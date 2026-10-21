@@ -51,9 +51,11 @@ EXTRA_ARGS=("${@:4}")
 
 LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 
+# The web job runner feeds the guest sudo password on stdin, in memory only.
+# An interactive CLI has no piped stdin and keeps the usual sudo prompt.
 SUDO_PASSWORD=""
-if [[ -n "${AIBOX_SUDO_PASSWORD_FILE:-}" && -f "$AIBOX_SUDO_PASSWORD_FILE" ]]; then
-    SUDO_PASSWORD=$(cat "$AIBOX_SUDO_PASSWORD_FILE")
+if [[ "${AIBOX_WEB_JOB:-0}" == "1" ]]; then
+    IFS= read -r SUDO_PASSWORD || true
 fi
 
 GUEST_IP=$(virsh -c "$LIBVIRT_DEFAULT_URI" domifaddr "$VM_NAME" --source lease 2>/dev/null | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)
@@ -89,7 +91,7 @@ run_target() {
 
         printf '%s\n' "$SUDO_PASSWORD" | \
             ssh -T -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" \
-                'IFS= read -r SUDO_PASSWORD; export SUDO_PASSWORD; chmod +x "$HOME/scripts/update-target.sh" 2>/dev/null || true; "$HOME/scripts/update-target.sh" os '"${EXTRA_ARGS[*]}"
+                'IFS= read -r SUDO_PASSWORD; . "$HOME/scripts/update-target.sh" os '"${EXTRA_ARGS[*]}"
     else
         ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" \
             '"$HOME/scripts/update-target.sh" '"$target ${EXTRA_ARGS[*]}"

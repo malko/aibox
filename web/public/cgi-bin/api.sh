@@ -286,18 +286,18 @@ $("$AIBOX_BIN" tunnel lan on "$target_name" --timeout "$TIMEOUT" --yes 2>>"$erro
                     json_error "400 Bad Request" "sudo password is required for OS updates"
                     exit 0
                 fi
-                AIBOX_JOB_SECRET="$SUDO_PASSWORD"
+                AIBOX_JOB_PASSWORD="$SUDO_PASSWORD"
                 job_start "Mise à jour: OS" update os -y || exit 0
-                unset AIBOX_JOB_SECRET
+                unset AIBOX_JOB_PASSWORD
                 ;;
             all)
                 if [[ -z "$SUDO_PASSWORD" ]]; then
                     json_error "400 Bad Request" "sudo password is required for OS updates"
                     exit 0
                 fi
-                AIBOX_JOB_SECRET="$SUDO_PASSWORD"
+                AIBOX_JOB_PASSWORD="$SUDO_PASSWORD"
                 job_start "Mise à jour: tout" update all -y || exit 0
-                unset AIBOX_JOB_SECRET
+                unset AIBOX_JOB_PASSWORD
                 ;;
             *)
                 json_error "400 Bad Request" "invalid update target"

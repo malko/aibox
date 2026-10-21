@@ -22,7 +22,6 @@ for dir in "$jobs_dir"/*; do
     printf 'cancelled\n' > "$dir/state"
     printf '143\n' > "$dir/exit"
     date +%s > "$dir/finished"
-    rm -f "$dir/secret"
 done
 
 rm -rf "$jobs_dir/.lock"

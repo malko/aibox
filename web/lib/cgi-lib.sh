@@ -243,17 +243,18 @@ job_start() {
     printf '%s\n' "$*" > "$job_dir/command"
     date +%s > "$job_dir/started"
 
-    # Optional secret (currently the guest sudo password for OS updates).
-    # It is stored in the private job directory and passed to the job through
-    # a file, never through the command line or the log.
-    if [[ -n "${AIBOX_JOB_SECRET:-}" ]]; then
-        printf '%s' "$AIBOX_JOB_SECRET" > "$job_dir/secret"
-        chmod 600 "$job_dir/secret" 2>/dev/null || true
-        unset AIBOX_JOB_SECRET
+    # Optional stdin secret (the guest sudo password for OS updates).
+    # It is piped directly to the job runner and never written to a file, the
+    # command line, the job metadata or the log.
+    if [[ -n "${AIBOX_JOB_PASSWORD:-}" ]]; then
+        printf '%s\n' "$AIBOX_JOB_PASSWORD" | \
+            nohup "$AIBOX_ROOT/web/lib/run-job.sh" secret "$job_dir" "$AIBOX_BIN" "$@" \
+                >/dev/null 2>&1 &
+        unset AIBOX_JOB_PASSWORD
+    else
+        nohup "$AIBOX_ROOT/web/lib/run-job.sh" nosecret "$job_dir" "$AIBOX_BIN" "$@" \
+            >/dev/null 2>&1 < /dev/null &
     fi
-
-    nohup "$AIBOX_ROOT/web/lib/run-job.sh" "$job_dir" "$AIBOX_BIN" "$@" \
-        >/dev/null 2>&1 &
 
     json_response "$(jq -n --arg id "$id" --arg title "$title" '{ok:true,id:$id,title:$title}')"
 }
@@ -323,7 +324,6 @@ job_cancel() {
     printf 'cancelled\n' > "$job_dir/state"
     printf '143\n' > "$job_dir/exit"
     date +%s > "$job_dir/finished"
-    rm -f "$job_dir/secret"
     rm -rf "$AIBOX_WEB_JOBS_DIR/.lock"
 
     json_response '{"ok":true}'
@@ -351,7 +351,6 @@ job_cancel_all() {
         printf 'cancelled\n' > "$dir/state"
         printf '143\n' > "$dir/exit"
         date +%s > "$dir/finished"
-        rm -f "$dir/secret"
     done
     rm -rf "$AIBOX_WEB_JOBS_DIR/.lock"
 }

@@ -178,8 +178,8 @@ function promptSudoPassword(target) {
       resolve(value);
     };
     const message = target === "all"
-      ? "La mise à jour « tout » inclut les paquets OS et nécessite le mot de passe sudo de la VM. Il n'est ni stocké ni journalisé."
-      : "La mise à jour OS nécessite le mot de passe sudo de la VM. Il n'est ni stocké ni journalisé.";
+      ? "La mise à jour « tout » inclut les paquets OS et nécessite le mot de passe sudo de la VM. Il est transmis directement, jamais écrit sur disque ni journalisé."
+      : "La mise à jour OS nécessite le mot de passe sudo de la VM. Il est transmis directement, jamais écrit sur disque ni journalisé.";
     const body = el("div", {},
       el("p", { className: "hint", text: message }),
       field("mot de passe sudo", input),

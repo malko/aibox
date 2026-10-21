@@ -214,7 +214,7 @@ The console provides:
 - tunnel state and controls;
 - service list, add/edit/remove, per-service LAN exposure and links;
 - update check and per-target updates; OS updates ask for the guest sudo
-  password, which is kept only in memory and in a private job file;
+  password, which is transmitted through pipes and never written to disk;
 - setup status detection and replay of safe setup steps;
 - LAN hostname setting for service URLs.
 

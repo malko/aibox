@@ -127,7 +127,6 @@ fi
 mkdir -p "$(dirname "$TOKEN_FILE")" "$JOBS_DIR" "$LOG_DIR"
 chmod 700 "$JOBS_DIR" 2>/dev/null || true
 rm -f "$QUIT_FLAG" "$SESSION_FILE"
-rm -f "$JOBS_DIR"/*/secret 2>/dev/null || true
 
 if [[ ! -s "$TOKEN_FILE" ]]; then
     if command -v od &>/dev/null; then
