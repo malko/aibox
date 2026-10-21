@@ -14,6 +14,7 @@ This repository contains bash scripts for managing an AI development VM with KVM
   - `host/service.sh` + `host/services/` - User service manager (systemd --user)
   - `services-funcs.sh` - `services.json` helpers and per-service LAN state
   - `cmd/` - Service and VM management commands
+  - `web/` - Local web console (BusyBox httpd, CGI bash, vanilla HTML/CSS/JS)
 
 ## Commands
 
@@ -33,6 +34,7 @@ This repository contains bash scripts for managing an AI development VM with KVM
 
 # VM and tunnel lifecycle
 ./aibox start                   # Start VM + tunnel service (no shell)
+./aibox web                     # Local web console (foreground, Ctrl+C stops)
 ./aibox status                  # VM state, service URLs, tunnel state
 ./aibox tunnel start            # Start the tunnel only (VM keeps running)
 ./aibox tunnel stop             # Stop the tunnel only
@@ -88,6 +90,9 @@ bash -n script-name.sh
 
 # Check all scripts
 for f in *.sh; do bash -n "$f"; done
+
+# Check the web UI JavaScript (optional, no build step)
+node --check web/public/app.js
 ```
 
 ## Code Style Guidelines

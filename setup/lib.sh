@@ -120,9 +120,11 @@ setup_run_step() {
 
     [[ -n "${SETUP_DONE[$name]:-}" ]] && return 0
 
-    for dep in ${SETUP_STEP_DEPS[$name]}; do
-        setup_run_step "$dep" || return 1
-    done
+    if [[ "${SETUP_SKIP_DEPS:-0}" != "1" ]]; then
+        for dep in ${SETUP_STEP_DEPS[$name]}; do
+            setup_run_step "$dep" || return 1
+        done
+    fi
 
     print_info "=== Setup step: $name (${SETUP_STEP_DESC[$name]}) ==="
 

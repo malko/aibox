@@ -9,12 +9,27 @@ usage_status() {
     echo "temporarily exposed."
     echo ""
     echo "Options:"
+    echo "  --json          Print machine-readable JSON"
     echo "  -h, --help      Show this help"
 }
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     usage_status
     exit 0
+fi
+
+if [[ "${1:-}" == "--json" ]]; then
+    SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+    while [[ -L "$SCRIPT_SOURCE" ]]; do
+        SOURCE_LINK="$(readlink "$SCRIPT_SOURCE")"
+        if [[ "$SOURCE_LINK" == /* ]]; then
+            SCRIPT_SOURCE="$SOURCE_LINK"
+        else
+            SCRIPT_SOURCE="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)/$SOURCE_LINK"
+        fi
+    done
+    SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
+    exec "$SCRIPT_DIR/cmd/tunnel" status --json "${@:2}"
 fi
 
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"

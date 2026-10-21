@@ -1,0 +1,102 @@
+#!/bin/bash
+set -e
+
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_SOURCE" ]]; do
+    SOURCE_LINK="$(readlink "$SCRIPT_SOURCE")"
+    if [[ "$SOURCE_LINK" == /* ]]; then
+        SCRIPT_SOURCE="$SOURCE_LINK"
+    else
+        SCRIPT_SOURCE="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)/$SOURCE_LINK"
+    fi
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
+CONFIG_FILE="${CONFIG_FILE:-$HOME/.config/aibox/aibox.conf}"
+source "$SCRIPT_DIR/config-funcs.sh"
+init_config_file
+
+usage() {
+    echo "Usage: aibox config <command> [arguments]"
+    echo ""
+    echo "Commands:"
+    echo "  get <key>          Print one configuration value"
+    echo "  set <key> <value>  Set one configuration value"
+    echo "  list               List configured keys and values"
+    echo ""
+    echo "Options:"
+    echo "  -h, --help         Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  aibox config get LAN_HOSTNAME"
+    echo "  aibox config set LAN_HOSTNAME desk.local"
+}
+
+validate_key() {
+    local key="$1"
+    if [[ ! "$key" =~ ^[A-Z][A-Z0-9_]*$ ]]; then
+        echo "Error: invalid configuration key '$key'." >&2
+        echo "Use uppercase letters, digits and underscores." >&2
+        return 1
+    fi
+}
+
+ACTION="${1:-}"
+if [[ $# -gt 0 ]]; then
+    shift
+fi
+
+case "$ACTION" in
+    ""|-h|--help|help)
+        usage
+        exit 0
+        ;;
+
+    get)
+        KEY="${1:-}"
+        if [[ -z "$KEY" ]]; then
+            echo "Usage: aibox config get <key>" >&2
+            exit 1
+        fi
+        validate_key "$KEY"
+        get_config "$KEY" ""
+        ;;
+
+    set)
+        KEY="${1:-}"
+        VALUE="${2:-}"
+        if [[ -z "$KEY" || $# -lt 2 ]]; then
+            echo "Usage: aibox config set <key> <value>" >&2
+            exit 1
+        fi
+        validate_key "$KEY"
+        if [[ "$VALUE" == *$'\n'* || "$VALUE" == *$'\r'* ]]; then
+            echo "Error: configuration values cannot contain newlines." >&2
+            exit 1
+        fi
+        if [[ "$KEY" == "LAN_HOSTNAME" && -n "$VALUE" && ! "$VALUE" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]]; then
+            echo "Error: invalid LAN_HOSTNAME '$VALUE'." >&2
+            echo "Use a hostname such as desk.local or desk.example.com." >&2
+            exit 1
+        fi
+        if [[ -z "$VALUE" ]]; then
+            unset_config "$KEY"
+            echo "Unset $KEY in $CONFIG_FILE"
+        else
+            save_config "$KEY" "$VALUE"
+            echo "Set $KEY in $CONFIG_FILE"
+        fi
+        ;;
+
+    list)
+        if [[ ! -f "$CONFIG_FILE" ]]; then
+            exit 0
+        fi
+        grep -E '^[A-Z][A-Z0-9_]*=' "$CONFIG_FILE" || true
+        ;;
+
+    *)
+        echo "Error: unknown config command '$ACTION'." >&2
+        usage >&2
+        exit 1
+        ;;
+esac

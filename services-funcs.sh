@@ -166,6 +166,38 @@ service_add_json() {
     fi
 }
 
+# service_update_json <old_name> <new_name> <port|""> <keep|permanent|local>
+# An empty port keeps the current one. A rename is done in the same atomic
+# rewrite as the other changes.
+service_update_json() {
+    local old_name="$1" new_name="$2" port="$3" mode="$4" tmp
+    mkdir -p "$(dirname "$SERVICES_FILE")" || return 1
+    services_normalize || return 1
+
+    [[ -f "$SERVICES_FILE" ]] || printf '{}\n' > "$SERVICES_FILE"
+    tmp=$(mktemp "${SERVICES_FILE}.XXXXXX") || return 1
+
+    if jq --arg old "$old_name" --arg new "$new_name" --arg port "$port" --arg mode "$mode" '
+        . as $all
+        | ($all[$old] // {}) as $entry
+        | ($entry | if type == "object" then . else { port: (. | tostring) } end) as $obj
+        | $all
+        | del(.[$old])
+        | .[$new] = (
+            $obj
+            | if $port != "" then .port = $port else . end
+            | if $mode == "permanent" then .lan = "permanent"
+              elif $mode == "local" then del(.lan)
+              else . end
+          )
+    ' "$SERVICES_FILE" > "$tmp" 2>/dev/null; then
+        mv "$tmp" "$SERVICES_FILE"
+    else
+        rm -f "$tmp"
+        return 1
+    fi
+}
+
 service_remove_json() {
     local name="$1" tmp
     services_normalize || return 1

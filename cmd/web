@@ -1,0 +1,198 @@
+#!/bin/bash
+set -e
+
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_SOURCE" ]]; do
+    SOURCE_LINK="$(readlink "$SCRIPT_SOURCE")"
+    if [[ "$SOURCE_LINK" == /* ]]; then
+        SCRIPT_SOURCE="$SOURCE_LINK"
+    else
+        SCRIPT_SOURCE="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)/$SOURCE_LINK"
+    fi
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
+CONFIG_FILE="${CONFIG_FILE:-$HOME/.config/aibox/aibox.conf}"
+source "$SCRIPT_DIR/config-funcs.sh"
+init_config_file
+
+usage_web() {
+    echo "Usage: aibox web [options]"
+    echo ""
+    echo "Start the local AIBox web interface in the foreground."
+    echo "Press Ctrl+C to stop it, or use the Quit button in the interface."
+    echo ""
+    echo "Options:"
+    echo "  --port <port>   Listen on this port (default: WEB_PORT or 8787)"
+    echo "  --no-open       Do not open the browser automatically"
+    echo "  -h, --help      Show this help"
+    echo ""
+    echo "The interface listens on 127.0.0.1 only. It requires BusyBox with the"
+    echo "httpd applet:"
+    echo "  Debian/Ubuntu: sudo apt install busybox-static"
+    echo "  macOS:         brew install busybox"
+    echo ""
+    echo "Examples:"
+    echo "  aibox web"
+    echo "  aibox web --port 8788"
+}
+
+PORT_OVERRIDE=""
+NO_OPEN=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --port)
+            if [[ $# -lt 2 || -z "$2" || "$2" == -* ]]; then
+                echo "Error: --port requires a value." >&2
+                exit 1
+            fi
+            PORT_OVERRIDE="$2"
+            shift 2
+            ;;
+        --no-open)
+            NO_OPEN=true
+            shift
+            ;;
+        -h|--help)
+            usage_web
+            exit 0
+            ;;
+        *)
+            echo "Error: unknown option: $1" >&2
+            usage_web >&2
+            exit 1
+            ;;
+    esac
+done
+
+WEB_PORT="${PORT_OVERRIDE:-$(get_config "WEB_PORT" "8787")}"
+if [[ ! "$WEB_PORT" =~ ^[0-9]+$ ]] || (( 10#$WEB_PORT < 1 || 10#$WEB_PORT > 65535 )); then
+    echo "Error: invalid web port '$WEB_PORT'." >&2
+    exit 1
+fi
+
+WEB_ROOT="$SCRIPT_DIR/web/public"
+TOKEN_FILE="$HOME/.config/aibox/web-token"
+JOBS_DIR="${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-web/jobs"
+PID_FILE="${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-web.pid"
+LOG_DIR="$HOME/.local/state/aibox/web"
+LOG_FILE="$LOG_DIR/httpd.log"
+
+BUSYBOX_BIN=""
+if command -v busybox &>/dev/null; then
+    BUSYBOX_BIN=$(command -v busybox)
+else
+    echo "Error: BusyBox is required for 'aibox web'." >&2
+    echo "" >&2
+    echo "Install it with:" >&2
+    echo "  Debian/Ubuntu: sudo apt install busybox-static" >&2
+    echo "  macOS:         brew install busybox" >&2
+    exit 1
+fi
+
+if ! "$BUSYBOX_BIN" --list 2>/dev/null | grep -qx "httpd"; then
+    echo "Error: this BusyBox build does not include the 'httpd' applet." >&2
+    echo "Install the full BusyBox package for your platform." >&2
+    exit 1
+fi
+
+if [[ ! -f "$WEB_ROOT/index.html" || ! -f "$WEB_ROOT/cgi-bin/api.sh" ]]; then
+    echo "Error: web assets are missing under $WEB_ROOT." >&2
+    exit 1
+fi
+
+if [[ ! -x "$WEB_ROOT/cgi-bin/api.sh" ]]; then
+    echo "Error: $WEB_ROOT/cgi-bin/api.sh is not executable." >&2
+    exit 1
+fi
+
+if [[ -f "$PID_FILE" ]]; then
+    OLD_PID=$(cat "$PID_FILE" 2>/dev/null || true)
+    if [[ -n "$OLD_PID" ]] && kill -0 "$OLD_PID" 2>/dev/null; then
+        echo "Error: aibox web is already running (PID $OLD_PID)." >&2
+        echo "Stop it first, or open http://127.0.0.1:$WEB_PORT/." >&2
+        exit 1
+    fi
+    rm -f "$PID_FILE"
+fi
+
+if command -v nc &>/dev/null && nc -z -w 1 127.0.0.1 "$WEB_PORT" &>/dev/null; then
+    echo "Error: 127.0.0.1:$WEB_PORT is already in use." >&2
+    echo "Use 'aibox web --port <other-port>'." >&2
+    exit 1
+fi
+
+mkdir -p "$(dirname "$TOKEN_FILE")" "$JOBS_DIR" "$LOG_DIR"
+chmod 700 "$JOBS_DIR" 2>/dev/null || true
+
+if [[ ! -s "$TOKEN_FILE" ]]; then
+    if command -v od &>/dev/null; then
+        (umask 077; dd if=/dev/urandom bs=32 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n' > "$TOKEN_FILE")
+    else
+        echo "Error: cannot generate a web token (od is missing)." >&2
+        exit 1
+    fi
+fi
+chmod 600 "$TOKEN_FILE" 2>/dev/null || true
+TOKEN=$(cat "$TOKEN_FILE")
+if [[ -z "$TOKEN" ]]; then
+    echo "Error: could not generate the web token." >&2
+    exit 1
+fi
+
+export AIBOX_ROOT="$SCRIPT_DIR"
+export AIBOX_WEB_PORT="$WEB_PORT"
+export AIBOX_WEB_TOKEN_FILE="$TOKEN_FILE"
+export AIBOX_WEB_JOBS_DIR="$JOBS_DIR"
+export AIBOX_WEB_PID_FILE="$PID_FILE"
+
+"$BUSYBOX_BIN" httpd -f -p "127.0.0.1:$WEB_PORT" -h "$WEB_ROOT" >> "$LOG_FILE" 2>&1 &
+WEB_PID=$!
+printf '%s\n' "$WEB_PID" > "$PID_FILE"
+
+READY=false
+for ((i = 0; i < 10; i++)); do
+    if command -v nc &>/dev/null && nc -z -w 1 127.0.0.1 "$WEB_PORT" &>/dev/null; then
+        READY=true
+        break
+    fi
+    if ! kill -0 "$WEB_PID" 2>/dev/null; then
+        break
+    fi
+    sleep 1
+done
+
+if [[ "$READY" != "true" ]]; then
+    echo "Error: the web server did not start." >&2
+    tail -n 20 "$LOG_FILE" >&2 2>/dev/null || true
+    kill "$WEB_PID" 2>/dev/null || true
+    rm -f "$PID_FILE"
+    exit 1
+fi
+
+URL="http://127.0.0.1:$WEB_PORT/#token=$TOKEN"
+
+cleanup() {
+    trap - INT TERM HUP EXIT
+    kill "$WEB_PID" 2>/dev/null || true
+    wait "$WEB_PID" 2>/dev/null || true
+    rm -f "$PID_FILE"
+}
+
+trap cleanup INT TERM HUP EXIT
+
+echo "AIBox web: $URL"
+echo "Log:       $LOG_FILE"
+
+if [[ "$NO_OPEN" != "true" ]]; then
+    if command -v xdg-open &>/dev/null; then
+        xdg-open "$URL" >/dev/null 2>&1 &
+    elif command -v open &>/dev/null; then
+        open "$URL" >/dev/null 2>&1 &
+    else
+        echo "Open this URL in your browser."
+    fi
+fi
+
+echo "Press Ctrl+C to stop."
+wait "$WEB_PID" || true

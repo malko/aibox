@@ -198,10 +198,21 @@ is_macos() {
     [[ "$(uname -s)" == "Darwin" ]]
 }
 
-# mDNS name of the host. macOS `hostname` already reports the .local suffix,
-# so only append it when it is missing (Linux).
+# Hostname used in LAN URLs. LAN_HOSTNAME overrides the detected mDNS name.
+# macOS `hostname` already reports the .local suffix, so only append it when it
+# is missing (Linux).
 host_local_name() {
-    local name
+    local configured="" name
+
+    if declare -F get_config >/dev/null 2>&1; then
+        configured=$(get_config "LAN_HOSTNAME" "")
+    fi
+
+    if [[ -n "$configured" ]]; then
+        printf '%s\n' "$configured"
+        return 0
+    fi
+
     name=$(hostname)
     if [[ "$name" != *.* ]]; then
         name="${name}.local"

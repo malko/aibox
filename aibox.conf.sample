@@ -44,3 +44,9 @@ CONFIGURE_VIRTIOFS="no"
 #   aibox tunnel lan on dsh --timeout 30m      # temporary
 # TUNNEL_LAN_TIMEOUT="2h"      # default auto-revert delay for temporary exposure
 # TUNNEL_WAIT="120"            # seconds the tunnel waits for the VM
+
+# Hostname used in LAN service URLs. Empty/absent = automatic (hostname.local).
+# LAN_HOSTNAME="desk.local"
+
+# Local web interface (aibox web).
+# WEB_PORT="8787"

@@ -25,6 +25,11 @@ prompt_config() {
     local current_value
     current_value=$(get_config "$key" "$default")
 
+    if [[ "${AIBOX_ASSUME_YES:-0}" == "1" ]]; then
+        printf '%s\n' "$current_value"
+        return 0
+    fi
+
     if [[ -n "$current_value" ]]; then
         read -p "$prompt_text [$current_value]: " result
         result="${result:-$current_value}"
@@ -43,6 +48,15 @@ prompt_config_yes_no() {
     local result
 
     current_value=$(get_config "$key" "$default")
+
+    if [[ "${AIBOX_ASSUME_YES:-0}" == "1" ]]; then
+        case "$current_value" in
+            yes|y|Y) printf '%s\n' "yes" ;;
+            no|n|N|"") printf '%s\n' "no" ;;
+            *) printf '%s\n' "$current_value" ;;
+        esac
+        return 0
+    fi
 
     while true; do
         if [[ "$current_value" == "yes" || "$current_value" == "y" ]]; then
@@ -73,10 +87,38 @@ save_config() {
         shell_value=$(printf '%s' "$value" | sed -e 's/[\\"$`]/\\&/g')
 
         if grep -qE "^${key}=" "$CONFIG_FILE" 2>/dev/null; then
+            local tmp
             escaped_value=$(printf '%s' "$shell_value" | sed -e 's/[&|\\]/\\&/g')
-            sed -i "s|^${key}=.*|${key}=\"${escaped_value}\"|" "$CONFIG_FILE"
+            tmp=$(mktemp "${CONFIG_FILE}.XXXXXX") || return 1
+            if sed "s|^${key}=.*|${key}=\"${escaped_value}\"|" "$CONFIG_FILE" > "$tmp"; then
+                mv "$tmp" "$CONFIG_FILE"
+            else
+                rm -f "$tmp"
+                return 1
+            fi
         else
             printf '%s\n' "${key}=\"${shell_value}\"" >> "$CONFIG_FILE"
+        fi
+    fi
+}
+
+unset_config() {
+    local key="$1" tmp rc
+
+    [[ -n "$key" && -f "$CONFIG_FILE" ]] || return 0
+    mkdir -p "$(dirname "$CONFIG_FILE")" || return 1
+    tmp=$(mktemp "${CONFIG_FILE}.XXXXXX") || return 1
+
+    if grep -vE "^${key}=" "$CONFIG_FILE" > "$tmp"; then
+        mv "$tmp" "$CONFIG_FILE"
+    else
+        rc=$?
+        if [[ "$rc" -eq 1 ]]; then
+            # No line matched the key: the filtered file is valid and empty.
+            mv "$tmp" "$CONFIG_FILE"
+        else
+            rm -f "$tmp"
+            return 1
         fi
     fi
 }

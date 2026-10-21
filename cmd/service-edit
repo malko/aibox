@@ -1,0 +1,141 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$SCRIPT_DIR/services-funcs.sh"
+
+usage() {
+    echo "Usage: aibox service-edit <name> [options]"
+    echo ""
+    echo "Edit a service in services.json and refresh the tunnel."
+    echo ""
+    echo "Options:"
+    echo "  --name <new-name>   Rename the service"
+    echo "  --port <port>       New guest port, or <host_port>:<guest_port>"
+    echo "  --lan               Expose the service on the LAN permanently"
+    echo "  --local             Move the service back to localhost only"
+    echo "  -h, --help          Show this help"
+    echo ""
+    echo "At least one option is required. Temporary LAN exposure is managed with:"
+    echo "  aibox tunnel lan on <name> --timeout 30m"
+    echo ""
+    echo "Examples:"
+    echo "  aibox service-edit opencode --port 4097"
+    echo "  aibox service-edit opencode --name oc --lan"
+    echo "  aibox service-edit oc --local"
+}
+
+SERVICE_NAME=""
+NEW_NAME=""
+PORT_ARG=""
+LAN_MODE="keep"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --name)
+            if [[ $# -lt 2 || -z "$2" || "$2" == -* ]]; then
+                echo "Error: --name requires a value." >&2
+                exit 1
+            fi
+            NEW_NAME="$2"
+            shift 2
+            ;;
+        --port)
+            if [[ $# -lt 2 || -z "$2" || "$2" == -* ]]; then
+                echo "Error: --port requires a value." >&2
+                exit 1
+            fi
+            PORT_ARG="$2"
+            shift 2
+            ;;
+        --lan)
+            LAN_MODE="permanent"
+            shift
+            ;;
+        --local)
+            LAN_MODE="local"
+            shift
+            ;;
+        -*)
+            echo "Error: unknown option: $1" >&2
+            usage >&2
+            exit 1
+            ;;
+        *)
+            if [[ -n "$SERVICE_NAME" ]]; then
+                echo "Error: too many arguments: $1" >&2
+                usage >&2
+                exit 1
+            fi
+            SERVICE_NAME="$1"
+            shift
+            ;;
+    esac
+done
+
+if [[ -z "$SERVICE_NAME" ]]; then
+    usage >&2
+    exit 1
+fi
+
+if [[ ! "$SERVICE_NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "Error: invalid service name '$SERVICE_NAME'." >&2
+    echo "Use letters, digits, '.', '_' or '-'." >&2
+    exit 1
+fi
+
+NEW_NAME="${NEW_NAME:-$SERVICE_NAME}"
+if [[ ! "$NEW_NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "Error: invalid service name '$NEW_NAME'." >&2
+    echo "Use letters, digits, '.', '_' or '-'." >&2
+    exit 1
+fi
+
+if [[ -n "$PORT_ARG" && ! "$PORT_ARG" =~ ^[0-9]+(:[0-9]+)?$ ]]; then
+    echo "Error: invalid port '$PORT_ARG'. Expected <port> or <host_port>:<guest_port>." >&2
+    exit 1
+fi
+
+if [[ -z "$PORT_ARG" && "$NEW_NAME" == "$SERVICE_NAME" && "$LAN_MODE" == "keep" ]]; then
+    echo "Error: nothing to change. Use --name, --port, --lan or --local." >&2
+    exit 1
+fi
+
+if ! services_require_jq; then
+    exit 1
+fi
+
+if ! service_exists "$SERVICE_NAME"; then
+    echo "Error: service '$SERVICE_NAME' not found." >&2
+    exit 1
+fi
+
+if [[ "$NEW_NAME" != "$SERVICE_NAME" ]] && service_exists "$NEW_NAME"; then
+    echo "Error: service '$NEW_NAME' already exists." >&2
+    exit 1
+fi
+
+if ! service_update_json "$SERVICE_NAME" "$NEW_NAME" "$PORT_ARG" "$LAN_MODE"; then
+    echo "Error: could not update $SERVICES_FILE." >&2
+    exit 1
+fi
+
+# Temporary LAN exposure is bound to the old name; a rename drops it.
+if [[ "$NEW_NAME" != "$SERVICE_NAME" ]]; then
+    lan_runtime_remove "$SERVICE_NAME" || true
+fi
+
+if [[ "$NEW_NAME" == "$SERVICE_NAME" ]]; then
+    echo "Updated service '$SERVICE_NAME'."
+else
+    echo "Renamed service '$SERVICE_NAME' to '$NEW_NAME'."
+fi
+
+# Apply the change to a running tunnel.
+if [[ -x "$SCRIPT_DIR/cmd/tunnel" ]]; then
+    "$SCRIPT_DIR/cmd/tunnel" reload >/dev/null 2>&1 || true
+fi

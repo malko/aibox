@@ -59,6 +59,23 @@ TMP_FILE=$(mktemp)
 } > "$TMP_FILE"
 mv "$TMP_FILE" "$CACHE_FILE"
 
+if [[ "${1:-}" == "--json" ]]; then
+    jq -n \
+        --argjson timestamp "$(date +%s)" \
+        --argjson apt "${APT_COUNT:-0}" \
+        --arg npm "$NPM_OUTDATED" \
+        --arg vscode "$VSCODE" \
+        --arg reboot "$REBOOT" \
+        '{
+            timestamp: $timestamp,
+            apt: $apt,
+            npm: $npm,
+            vscode: ($vscode == "yes"),
+            reboot: ($reboot == "yes")
+        }'
+    exit 0
+fi
+
 print_summary() {
     local found=no
     if [[ "${APT_COUNT:-0}" -gt 0 ]]; then

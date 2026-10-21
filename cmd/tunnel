@@ -29,7 +29,7 @@ usage() {
     echo "  start                     Start the tunnel service"
     echo "  stop                      Stop the tunnel service (VM keeps running)"
     echo "  restart                   Restart the tunnel service"
-    echo "  status                    Show tunnel state, URLs and per-service LAN modes"
+    echo "  status [--json] [--tokens] Show tunnel state, URLs and per-service LAN modes"
     echo "  logs                      Show the last tunnel logs"
     echo "  lan on [SERVICE...]       Expose services on the LAN (temporary by default)"
     echo "  lan off [SERVICE...]      Back to localhost for the selected services (or all)"
@@ -43,6 +43,10 @@ usage() {
     echo "  -y, --yes                 Do not ask for confirmation"
     echo ""
     echo "  --permanent, --timeout and --no-timeout are mutually exclusive."
+    echo ""
+    echo "Options for 'status':"
+    echo "  --json                    Machine-readable JSON"
+    echo "  --tokens                  Include dsh/opencode authentication details"
     echo ""
     echo "Without SERVICE, 'lan on' and 'lan off' apply to every configured service."
     echo "Temporary exposure is always lost on reboot; permanent exposure is kept"
@@ -185,6 +189,138 @@ service_urls() {
             fi
         fi
     done < <(services_entries)
+}
+
+# tunnel_status_json [tokens]
+# Machine-readable status for 'aibox status --json' and the web UI.
+tunnel_status_json() {
+    local include_tokens="${1:-false}"
+    local vm_exists_json=false vm_state_value="unknown" guest_ip="" lan_host
+    local tunnel_installed=false tunnel_active=false tunnel_status="unsupported"
+    local permanent_count=0 temporary_count=0
+    local name port host guest mode until until_json suffix password url_local url_lan
+    local services_tmp services_json="[]"
+
+    if vm_exists "$VM_NAME"; then
+        vm_exists_json=true
+        vm_state_value=$(vm_state "$VM_NAME")
+        if [[ "$vm_state_value" == "running" ]]; then
+            guest_ip=$(vm_ip "$VM_NAME")
+        fi
+    fi
+
+    if svc_require >/dev/null 2>&1; then
+        if svc_installed; then
+            tunnel_installed=true
+            tunnel_status=$(svc_status_text)
+            if svc_is_active; then
+                tunnel_active=true
+            fi
+        else
+            tunnel_status="not installed"
+        fi
+    fi
+
+    lan_host=$(host_local_name)
+    services_tmp=$(mktemp) || return 1
+
+    while IFS=$'\t' read -r name port; do
+        [[ -n "$name" && -n "$port" ]] || continue
+
+        host="${port%%:*}"
+        guest="${port#*:}"
+        mode=$(service_effective_lan "$name")
+        suffix=""
+        password=""
+
+        if [[ "$include_tokens" == "true" ]]; then
+            suffix=$(guest_dsh_suffix "$guest")
+            if [[ "$name" == "opencode" ]]; then
+                password=$(guest_opencode_password)
+            fi
+        fi
+
+        url_local="http://localhost:${host}${suffix}"
+        url_lan=""
+        if [[ "$mode" != "local" ]]; then
+            url_lan="http://${lan_host}:${host}${suffix}"
+        fi
+
+        until=$(service_lan_until "$name")
+        if [[ "$until" =~ ^[0-9]+$ ]] && [[ "$until" -gt 0 ]]; then
+            until_json="$until"
+        else
+            until_json="null"
+        fi
+
+        case "$mode" in
+            permanent) permanent_count=$((permanent_count + 1)) ;;
+            temporary) temporary_count=$((temporary_count + 1)) ;;
+        esac
+
+        jq -n \
+            --arg name "$name" \
+            --arg port "$port" \
+            --arg host_port "$host" \
+            --arg guest_port "$guest" \
+            --arg lan "$mode" \
+            --argjson until "$until_json" \
+            --arg url_local "$url_local" \
+            --arg url_lan "$url_lan" \
+            --arg password "$password" \
+            '{
+                name: $name,
+                port: $port,
+                host_port: $host_port,
+                guest_port: $guest_port,
+                lan: $lan,
+                until: $until,
+                url_local: $url_local,
+                url_lan: (if $url_lan == "" then null else $url_lan end),
+                password: (if $password == "" then null else $password end)
+            }' >> "$services_tmp"
+    done < <(services_entries)
+
+    if [[ -s "$services_tmp" ]]; then
+        services_json=$(jq -s '.' "$services_tmp")
+    fi
+    rm -f "$services_tmp"
+
+    jq -n \
+        --arg vm_name "$VM_NAME" \
+        --argjson vm_exists "$vm_exists_json" \
+        --arg vm_state "$vm_state_value" \
+        --arg vm_ip "$guest_ip" \
+        --argjson tunnel_installed "$tunnel_installed" \
+        --argjson tunnel_active "$tunnel_active" \
+        --arg tunnel_status "$tunnel_status" \
+        --arg lan_hostname "$lan_host" \
+        --arg lan_hostname_configured "$(get_config "LAN_HOSTNAME" "")" \
+        --argjson permanent_count "$permanent_count" \
+        --argjson temporary_count "$temporary_count" \
+        --argjson services "$services_json" \
+        '{
+            vm: {
+                name: $vm_name,
+                exists: $vm_exists,
+                state: $vm_state,
+                ip: (if $vm_ip == "" then null else $vm_ip end)
+            },
+            tunnel: {
+                installed: $tunnel_installed,
+                active: $tunnel_active,
+                status: $tunnel_status
+            },
+            config: {
+                lan_hostname: $lan_hostname,
+                lan_hostname_configured: (if $lan_hostname_configured == "" then null else $lan_hostname_configured end)
+            },
+            lan: {
+                permanent: $permanent_count,
+                temporary: $temporary_count
+            },
+            services: $services
+        }'
 }
 
 # svc_refresh applies config changes to the tunnel service. It starts the
@@ -408,6 +544,26 @@ case "$ACTION" in
         ;;
 
     status)
+        STATUS_JSON=false
+        STATUS_TOKENS=false
+        for arg in "$@"; do
+            case "$arg" in
+                --json) STATUS_JSON=true ;;
+                --tokens) STATUS_TOKENS=true ;;
+                -h|--help) usage; exit 0 ;;
+                *)
+                    print_error "Unknown option for 'tunnel status': $arg"
+                    exit 1
+                    ;;
+            esac
+        done
+
+        if [[ "$STATUS_JSON" == "true" ]]; then
+            enforce_lan_timeouts >&2
+            tunnel_status_json "$STATUS_TOKENS"
+            exit 0
+        fi
+
         enforce_lan_timeouts
         echo "Tunnel:"
         if [[ "$(vm_state "$VM_NAME")" == "running" ]]; then

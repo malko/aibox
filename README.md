@@ -11,6 +11,9 @@ Scripts for managing an AI development virtual machine with reverse proxy and se
 # Connect to VM (automatically forwards configured services)
 ./aibox
 
+# Or open the local web console (services, updates, setup, VM lifecycle)
+./aibox web
+
 # Access opencode at http://localhost:4096
 # (connection password: see the VM MOTD or run ./aibox status)
 ```
@@ -20,9 +23,16 @@ Scripts for managing an AI development virtual machine with reverse proxy and se
 ### Host Machine
 - KVM/QEMU with libvirt
 - virsh, libvirt-client installed
+- BusyBox with the `httpd` applet, only for `aibox web`
 
 ```bash
-sudo apt install virsh libvirt-client
+sudo apt install virsh libvirt-client busybox-static
+```
+
+On macOS, install BusyBox with Homebrew:
+
+```bash
+brew install busybox
 ```
 
 ### Guest VM
@@ -182,6 +192,34 @@ services for `service-remove` and `tunnel lan on/off`, snapshot names for
 ./aibox restart               # Restart VM (tunnel reconnects automatically)
 ```
 
+### Web interface
+
+`aibox web` starts a local web console and opens it in your browser:
+
+```bash
+./aibox web
+./aibox web --port 8788
+./aibox web --no-open
+```
+
+It listens on `127.0.0.1` only and requires BusyBox with the `httpd` applet.
+The server runs in the foreground: press `Ctrl+C` to stop it, or use the
+**quitter l'interface** button. Nothing keeps running in the background.
+
+The console provides:
+
+- VM lifecycle: start, restart, shutdown (with optional force);
+- tunnel state and controls;
+- service list, add/edit/remove, per-service LAN exposure and links;
+- update check and per-target updates;
+- setup status detection and replay of safe setup steps;
+- LAN hostname setting for service URLs.
+
+The access token is stored in `~/.config/aibox/web-token` (mode `600`) and is
+passed to the browser in the URL fragment. The API requires it as a bearer
+token, rejects non-local `Host`/`Origin` headers, and never listens on the LAN.
+Keys `1`–`5` switch between the console sections.
+
 ### Run a command in the VM
 
 `aibox exec` runs a command inside the VM over SSH and returns its exit code.
@@ -249,6 +287,8 @@ Notes:
 ./aibox service-add opencode 4096            # Add a service (localhost only)
 ./aibox service-add portainer 8080:9000      # Add with custom port mapping
 ./aibox service-add opencode 4096 --lan      # Add with permanent LAN exposure
+./aibox service-edit opencode --port 4097    # Change the port
+./aibox service-edit opencode --name oc --lan # Rename and expose on the LAN
 ./aibox service-list                         # List services and LAN modes
 ./aibox service-remove opencode              # Remove a service
 ```
@@ -300,6 +340,10 @@ so you can re-run just one part without redoing everything.
 ./setup.sh dsh                # Install dsh and its web service
 ./setup.sh motd dsh           # Several steps in one run
 aibox setup motd              # Same, through the main CLI
+./setup.sh --status           # Show what is installed
+./setup.sh --status --json    # Same, machine-readable
+./setup.sh motd --yes         # Use saved/default answers (non-interactive)
+./setup.sh motd --no-deps     # Run only this step, without prerequisites
 ./setup.sh --help             # List all steps
 ```
 
@@ -348,6 +392,13 @@ TUNNEL_LAN_TIMEOUT="2h"      # default temporary LAN duration
 TUNNEL_WAIT="120"            # seconds the tunnel waits for the VM
 ```
 
+Web interface settings:
+
+```
+LAN_HOSTNAME="desk.local"    # hostname used in LAN service URLs (empty = auto)
+WEB_PORT="8787"              # local web console port
+```
+
 `TUNNEL_BIND` was the old global LAN switch. It is migrated automatically to
 per-service settings on the next aibox command; it is no longer needed.
 
@@ -372,8 +423,11 @@ aibox/
 │   ├── status                   # VM state, URLs, tunnel state
 │   ├── tunnel                   # Manage the tunnel user service
 │   ├── service-add              # Add service (optional permanent LAN)
+│   ├── service-edit             # Edit or rename a service
 │   ├── service-remove           # Remove service
 │   ├── service-list             # List services and LAN modes
+│   ├── web                      # Local web console (BusyBox httpd)
+│   ├── config                   # Read or update aibox.conf
 │   ├── update-target            # Dispatch an update target
 │   ├── check-updates            # Check for available updates
 │   ├── self-update              # Pull the repo and push scripts to the VM
@@ -398,6 +452,9 @@ aibox/
 │   ├── install-claude.sh        # Install Claude Code
 │   ├── update-check.sh          # Gather available updates
 │   └── install-update-check.sh  # Install the update check timer
+├── web/                         # Local web console
+│   ├── public/                  # HTML/CSS/JS and BusyBox CGI
+│   └── lib/                     # CGI helpers and job runner
 ├── services-funcs.sh            # services.json + per-service LAN state
 └── shared-funcs.sh              # Common functions
 ```
@@ -409,6 +466,8 @@ aibox/
   `aibox tunnel lan on <service> --permanent` only when you really need it
 - Permanent exposure survives reboots; review it with `aibox service-list` and
   turn it off with `aibox tunnel lan off <service>` when it is no longer needed
+- The web console listens on `127.0.0.1` only and requires a local token;
+  do not expose it on the LAN. Use an SSH port forward if you need remote access
 - opencode generates its own server password at startup; vscode-server should
   keep a password; aibox warns before LAN exposure when they are unprotected
 - The host `~/git` share is writable by design: the agent can modify your

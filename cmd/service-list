@@ -14,11 +14,20 @@ usage() {
     echo "  LAN temporary until ...   Exposed until the timeout or the next reboot"
     echo ""
     echo "Options:"
+    echo "  --json          Print machine-readable JSON"
     echo "  -h, --help      Show this help"
 }
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     usage
+    exit 0
+fi
+
+if [[ "${1:-}" == "--json" ]]; then
+    if ! services_require_jq; then
+        exit 1
+    fi
+    "$SCRIPT_DIR/cmd/tunnel" status --json | jq '.services'
     exit 0
 fi
 
