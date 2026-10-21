@@ -124,8 +124,10 @@ if ! service_update_json "$SERVICE_NAME" "$NEW_NAME" "$PORT_ARG" "$LAN_MODE"; th
     exit 1
 fi
 
-# Temporary LAN exposure is bound to the old name; a rename drops it.
-if [[ "$NEW_NAME" != "$SERVICE_NAME" ]]; then
+# An explicit LAN mode (permanent or local) and a rename both invalidate the
+# temporary runtime entry. Without this, switching back to localhost would
+# leave a temporary exposure active.
+if [[ "$LAN_MODE" != "keep" || "$NEW_NAME" != "$SERVICE_NAME" ]]; then
     lan_runtime_remove "$SERVICE_NAME" || true
 fi
 

@@ -13,11 +13,20 @@ jobs_dir="$(cd "$job_dir/.." && pwd)"
 lock_dir="$jobs_dir/.lock"
 child=""
 
+if [[ -f "$job_dir/secret" ]]; then
+    export AIBOX_SUDO_PASSWORD_FILE="$job_dir/secret"
+fi
+
+cleanup_secret() {
+    rm -f "$job_dir/secret"
+}
+
 finish() {
     local rc="$1"
     printf '%s\n' "$rc" > "$job_dir/exit"
     printf 'done\n' > "$job_dir/state"
     date +%s > "$job_dir/finished"
+    cleanup_secret
     rm -rf "$lock_dir"
 }
 
@@ -28,6 +37,7 @@ cancel() {
     printf 'cancelled\n' > "$job_dir/state"
     printf '143\n' > "$job_dir/exit"
     date +%s > "$job_dir/finished"
+    cleanup_secret
     rm -rf "$lock_dir"
     exit 143
 }

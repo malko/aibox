@@ -275,24 +275,35 @@ $("$AIBOX_BIN" tunnel lan on "$target_name" --timeout "$TIMEOUT" --yes 2>>"$erro
     "POST updates/apply")
         cgi_json_body || exit 0
         TARGET=$(printf '%s' "$CGI_BODY" | jq -r '.target // empty')
+        SUDO_PASSWORD=$(printf '%s' "$CGI_BODY" | jq -r '.sudo_password // empty')
+
         case "$TARGET" in
-            scripts|os|opencode|opencode-service|dsh|claude|vscode-server)
+            scripts|opencode|opencode-service|dsh|claude|vscode-server)
+                job_start "Mise à jour: $TARGET" update "$TARGET" || exit 0
+                ;;
+            os)
+                if [[ -z "$SUDO_PASSWORD" ]]; then
+                    json_error "400 Bad Request" "sudo password is required for OS updates"
+                    exit 0
+                fi
+                AIBOX_JOB_SECRET="$SUDO_PASSWORD"
+                job_start "Mise à jour: OS" update os -y || exit 0
+                unset AIBOX_JOB_SECRET
                 ;;
             all)
-                job_start "Mise à jour: $TARGET" update "$TARGET" -y || exit 0
-                exit 0
+                if [[ -z "$SUDO_PASSWORD" ]]; then
+                    json_error "400 Bad Request" "sudo password is required for OS updates"
+                    exit 0
+                fi
+                AIBOX_JOB_SECRET="$SUDO_PASSWORD"
+                job_start "Mise à jour: tout" update all -y || exit 0
+                unset AIBOX_JOB_SECRET
                 ;;
             *)
                 json_error "400 Bad Request" "invalid update target"
                 exit 0
                 ;;
         esac
-
-        if [[ "$TARGET" == "os" ]]; then
-            job_start "Mise à jour: $TARGET" update "$TARGET" -y || exit 0
-        else
-            job_start "Mise à jour: $TARGET" update "$TARGET" || exit 0
-        fi
         ;;
 
     "POST self-update")
@@ -365,7 +376,38 @@ $("$AIBOX_BIN" tunnel lan on "$target_name" --timeout "$TIMEOUT" --yes 2>>"$erro
         api_action config set LAN_HOSTNAME "$HOSTNAME" || exit 0
         ;;
 
+    "POST session")
+        cgi_json_body || exit 0
+        SESSION_ID=$(printf '%s' "$CGI_BODY" | jq -r '.id // empty')
+        if [[ -z "$SESSION_ID" || ! "$SESSION_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            json_error "400 Bad Request" "invalid session id"
+            exit 0
+        fi
+        printf '%s\n' "$SESSION_ID" > "$AIBOX_WEB_SESSION_FILE"
+        chmod 600 "$AIBOX_WEB_SESSION_FILE" 2>/dev/null || true
+        rm -f "$AIBOX_WEB_QUIT_FLAG"
+        json_response '{"ok":true}'
+        ;;
+
+    "POST quit/cancel")
+        rm -f "$AIBOX_WEB_QUIT_FLAG"
+        json_response '{"ok":true}'
+        ;;
+
     "POST quit")
+        cgi_json_body || exit 0
+        SESSION_ID=$(printf '%s' "$CGI_BODY" | jq -r '.session_id // empty')
+        if [[ -n "$SESSION_ID" && ! "$SESSION_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            json_error "400 Bad Request" "invalid session id"
+            exit 0
+        fi
+
+        CURRENT_SESSION=$(cat "$AIBOX_WEB_SESSION_FILE" 2>/dev/null || true)
+        if [[ -n "$SESSION_ID" && -n "$CURRENT_SESSION" && "$SESSION_ID" != "$CURRENT_SESSION" ]]; then
+            json_response '{"ok":true,"ignored":true}'
+            exit 0
+        fi
+
         PID_FILE="${AIBOX_WEB_PID_FILE:-}"
         if [[ -z "$PID_FILE" || ! -f "$PID_FILE" ]]; then
             json_error "500 Internal Server Error" "web PID file not found"
@@ -376,6 +418,37 @@ $("$AIBOX_BIN" tunnel lan on "$target_name" --timeout "$TIMEOUT" --yes 2>>"$erro
             json_error "500 Internal Server Error" "invalid web PID"
             exit 0
         fi
+
+        DELAY=$(query_get delay || true)
+        if [[ -n "$DELAY" ]]; then
+            if [[ ! "$DELAY" =~ ^[0-9]+$ ]] || (( DELAY < 0 || DELAY > 30 )); then
+                json_error "400 Bad Request" "invalid quit delay"
+                exit 0
+            fi
+
+            QUIT_ID="$(date +%s)-$$-$RANDOM"
+            printf '%s|%s|%s\n' "$QUIT_ID" "$SESSION_ID" "$(date +%s)" > "$AIBOX_WEB_QUIT_FLAG"
+            chmod 600 "$AIBOX_WEB_QUIT_FLAG" 2>/dev/null || true
+
+            json_response '{"ok":true,"delayed":true}'
+            nohup bash -c '
+                sleep "$1"
+                if [ -f "$2" ]; then
+                    IFS="|" read -r id sid started < "$2"
+                    if [ "$id" = "$3" ]; then
+                        if [ -z "$4" ] || [ "$(cat "$5" 2>/dev/null || true)" = "$4" ]; then
+                            "$6" >/dev/null 2>&1 || true
+                            kill -TERM "$7" 2>/dev/null || true
+                        fi
+                        rm -f "$2"
+                    fi
+                fi
+            ' _ "$DELAY" "$AIBOX_WEB_QUIT_FLAG" "$QUIT_ID" "$SESSION_ID" "$AIBOX_WEB_SESSION_FILE" \
+                "$AIBOX_ROOT/web/lib/cancel-jobs.sh" "$PID" >/dev/null 2>&1 &
+            exit 0
+        fi
+
+        rm -f "$AIBOX_WEB_QUIT_FLAG"
         job_cancel_all
         json_response '{"ok":true}'
         nohup bash -c "sleep 1; kill -TERM $PID 2>/dev/null || true" >/dev/null 2>&1 &

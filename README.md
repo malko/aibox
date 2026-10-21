@@ -204,14 +204,17 @@ services for `service-remove` and `tunnel lan on/off`, snapshot names for
 
 It listens on `127.0.0.1` only and requires BusyBox with the `httpd` applet.
 The server runs in the foreground: press `Ctrl+C` to stop it, or use the
-**quitter l'interface** button. Nothing keeps running in the background.
+**fermer** button in the header. Closing the browser tab also stops it after a
+short grace period; a reload cancels that delayed stop. Nothing keeps running
+in the background.
 
 The console provides:
 
 - VM lifecycle: start, restart, shutdown (with optional force);
 - tunnel state and controls;
 - service list, add/edit/remove, per-service LAN exposure and links;
-- update check and per-target updates;
+- update check and per-target updates; OS updates ask for the guest sudo
+  password, which is kept only in memory and in a private job file;
 - setup status detection and replay of safe setup steps;
 - LAN hostname setting for service URLs.
 

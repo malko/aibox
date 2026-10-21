@@ -12,6 +12,7 @@ const state = {
   jobLogEl: null,
   lastError: "",
   quitting: false,
+  sessionId: "",
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -42,6 +43,32 @@ function initToken() {
     history.replaceState(null, "", window.location.pathname + window.location.search);
   }
   state.token = localStorage.getItem(TOKEN_KEY) || "";
+}
+
+function newSessionId() {
+  if (window.crypto?.randomUUID) {
+    return window.crypto.randomUUID().replace(/-/g, "");
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function registerSession() {
+  if (!state.token) return;
+  state.sessionId = newSessionId();
+  try {
+    await api("session", { method: "POST", body: { id: state.sessionId } });
+  } catch {
+    // Keep the page usable; the explicit quit button still works.
+  }
+}
+
+async function cancelPendingQuit() {
+  if (!state.token) return;
+  try {
+    await api("quit/cancel", { method: "POST" });
+  } catch {
+    // No pending quit, or the server is already stopping.
+  }
 }
 
 async function api(path, options = {}) {
@@ -130,6 +157,54 @@ function openDialog({ title, body, actions = [] }) {
   }
 
   dialog.showModal();
+}
+
+function promptSudoPassword(target) {
+  return new Promise((resolve) => {
+    const dialog = $("#dialog");
+    let settled = false;
+    const input = el("input", {
+      type: "password",
+      className: "input mono",
+      id: "sudo-password",
+      autocomplete: "off",
+      spellcheck: "false",
+    });
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      input.value = "";
+      if (dialog.open) dialog.close();
+      resolve(value);
+    };
+    const message = target === "all"
+      ? "La mise à jour « tout » inclut les paquets OS et nécessite le mot de passe sudo de la VM. Il n'est ni stocké ni journalisé."
+      : "La mise à jour OS nécessite le mot de passe sudo de la VM. Il n'est ni stocké ni journalisé.";
+    const body = el("div", {},
+      el("p", { className: "hint", text: message }),
+      field("mot de passe sudo", input),
+    );
+
+    openDialog({
+      title: "mise à jour de l'os",
+      body,
+      actions: [
+        { label: "annuler", onClick: () => finish(null) },
+        {
+          label: "continuer",
+          className: "btn-primary",
+          onClick: () => {
+            if (!input.value) {
+              toast("mot de passe requis", true);
+              return;
+            }
+            finish(input.value);
+          },
+        },
+      ],
+    });
+    dialog.addEventListener("close", () => finish(null), { once: true });
+  });
 }
 
 function confirmDialog(title, message, confirmLabel = "confirmer", danger = false) {
@@ -221,12 +296,34 @@ function renderStatus(data) {
   $("#vm-address").textContent = vm.ip || "—";
   $("#vm-ip").textContent = vm.ip || "—";
 
+  const vmActive = vm.running || vm.state === "paused";
+  const vmStart = $('[data-vm="start"]');
+  const vmRestart = $('[data-vm="restart"]');
+  const vmShutdown = $('[data-vm="shutdown"]');
+  vmStart.disabled = vmActive || !vm.exists;
+  vmStart.title = !vm.exists ? "La VM n'existe pas encore" : vmActive ? "La VM est déjà démarrée" : "";
+  vmRestart.disabled = !vmActive;
+  vmRestart.title = vmActive ? "" : "La VM n'est pas démarrée";
+  vmShutdown.disabled = !vmActive;
+  vmShutdown.title = vmActive ? "" : "La VM n'est pas démarrée";
+  $("#vm-force").disabled = !vmActive;
+
   const tunnelTone = tunnel.active ? "ok" : tunnel.installed ? "warn" : "bad";
   setBadge("#tunnel-badge", "TUNNEL", tunnel.active ? "active" : (tunnel.status || "inactive"), tunnelTone);
   setStatusDot("#tunnel-dot", tunnelTone);
   $("#tunnel-status").textContent = tunnel.status || "—";
   $("#tunnel-count").textContent = String(services.length);
   $("#lan-count").textContent = `${lan.permanent || 0} permanent / ${lan.temporary || 0} temporaire`;
+
+  const tunnelStart = $('[data-tunnel="start"]');
+  const tunnelRestart = $('[data-tunnel="restart"]');
+  const tunnelStop = $('[data-tunnel="stop"]');
+  tunnelStart.disabled = tunnel.active || !tunnel.installed;
+  tunnelStart.title = !tunnel.installed ? "Le service tunnel n'est pas installé" : tunnel.active ? "Le tunnel est déjà démarré" : "";
+  tunnelRestart.disabled = !tunnel.installed;
+  tunnelRestart.title = tunnel.installed ? "" : "Le service tunnel n'est pas installé";
+  tunnelStop.disabled = !tunnel.active;
+  tunnelStop.title = tunnel.active ? "" : "Le tunnel n'est pas démarré";
 
   state.services = services;
   renderOverviewServices(services);
@@ -600,19 +697,17 @@ async function checkUpdates() {
 }
 
 async function applyUpdate(target) {
+  let sudoPassword = null;
+
   if (target === "os" || target === "all") {
-    const confirmed = await confirmDialog(
-      `mettre à jour ${target}`,
-      target === "all"
-        ? "Toutes les cibles seront mises à jour, y compris les paquets OS en mode non interactif."
-        : "Les paquets OS seront mis à jour en mode non interactif.",
-      "mettre à jour",
-      false,
-    );
-    if (!confirmed) return;
+    sudoPassword = await promptSudoPassword(target);
+    if (sudoPassword === null) return;
   }
+
   try {
-    const data = await api("updates/apply", { method: "POST", body: { target } });
+    const body = { target };
+    if (sudoPassword !== null) body.sudo_password = sudoPassword;
+    const data = await api("updates/apply", { method: "POST", body });
     startJob(data, { reload: "updates" });
   } catch (error) {
     toast(error.message, true);
@@ -739,16 +834,23 @@ async function quitWeb() {
   if (!confirmed) return;
 
   try {
-    await api("quit", { method: "POST" });
+    await api("quit", { method: "POST", body: { session_id: state.sessionId } });
     state.quitting = true;
     if (state.jobTimer) clearTimeout(state.jobTimer);
     $("#footer-status").textContent = "service arrêté";
     document.body.classList.add("stopped");
     openDialog({
       title: "service arrêté",
-      body: "Le serveur aibox web est arrêté. Tu peux fermer cet onglet.",
+      body: "Le serveur aibox web est arrêté. L'onglet va se fermer ; sinon, tu peux le fermer manuellement.",
       actions: [{ label: "fermer", onClick: closeDialog }],
     });
+    setTimeout(() => {
+      try {
+        window.close();
+      } catch {
+        // Browsers may refuse to close a tab they did not open.
+      }
+    }, 800);
   } catch (error) {
     toast(error.message, true);
   }
@@ -909,6 +1011,21 @@ function initEvents() {
     if (!document.hidden) loadStatus({ quiet: true });
   });
 
+  window.addEventListener("pagehide", (event) => {
+    if (event.persisted || state.quitting || !state.token) return;
+    // Closing the tab stops the server after a short grace period. A reload
+    // or a new page cancels it before it fires.
+    fetch("/cgi-bin/api.sh/quit?delay=5", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${state.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ session_id: state.sessionId }),
+      keepalive: true,
+    }).catch(() => {});
+  });
+
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && $("#dialog").open) closeDialog();
     if (event.target instanceof Element && event.target.matches("input, select, textarea")) return;
@@ -931,6 +1048,8 @@ async function init() {
     return;
   }
 
+  await registerSession();
+  await cancelPendingQuit();
   await loadStatus();
   await Promise.allSettled([loadUpdates({ quiet: true }), loadSetup({ quiet: true })]);
   switchTab(currentTabFromLocation(), false);

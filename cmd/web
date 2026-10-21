@@ -75,6 +75,8 @@ WEB_ROOT="$SCRIPT_DIR/web/public"
 TOKEN_FILE="$HOME/.config/aibox/web-token"
 JOBS_DIR="${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-web/jobs"
 PID_FILE="${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-web.pid"
+QUIT_FLAG="${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-web.quit"
+SESSION_FILE="${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-web.session"
 LOG_DIR="$HOME/.local/state/aibox/web"
 LOG_FILE="$LOG_DIR/httpd.log"
 
@@ -124,6 +126,8 @@ fi
 
 mkdir -p "$(dirname "$TOKEN_FILE")" "$JOBS_DIR" "$LOG_DIR"
 chmod 700 "$JOBS_DIR" 2>/dev/null || true
+rm -f "$QUIT_FLAG" "$SESSION_FILE"
+rm -f "$JOBS_DIR"/*/secret 2>/dev/null || true
 
 if [[ ! -s "$TOKEN_FILE" ]]; then
     if command -v od &>/dev/null; then
@@ -145,6 +149,8 @@ export AIBOX_WEB_PORT="$WEB_PORT"
 export AIBOX_WEB_TOKEN_FILE="$TOKEN_FILE"
 export AIBOX_WEB_JOBS_DIR="$JOBS_DIR"
 export AIBOX_WEB_PID_FILE="$PID_FILE"
+export AIBOX_WEB_QUIT_FLAG="$QUIT_FLAG"
+export AIBOX_WEB_SESSION_FILE="$SESSION_FILE"
 
 "$BUSYBOX_BIN" httpd -f -p "127.0.0.1:$WEB_PORT" -h "$WEB_ROOT" >> "$LOG_FILE" 2>&1 &
 WEB_PID=$!
@@ -176,7 +182,7 @@ cleanup() {
     trap - INT TERM HUP EXIT
     kill "$WEB_PID" 2>/dev/null || true
     wait "$WEB_PID" 2>/dev/null || true
-    rm -f "$PID_FILE"
+    rm -f "$PID_FILE" "$QUIT_FLAG" "$SESSION_FILE"
 }
 
 trap cleanup INT TERM HUP EXIT

@@ -1,13 +1,24 @@
 #!/bin/bash
+set -e
 
 TARGET="${1:-}"
 EXTRA="${2:-}"
 SCRIPTS_DIR="$HOME/scripts"
 
 NVM_DIR="$HOME/.nvm"
-if [ -d "$NVM_DIR" ]; then
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+if [ -d "$NVM_DIR" ] && [ -s "$NVM_DIR/nvm.sh" ]; then
+    \. "$NVM_DIR/nvm.sh"
 fi
+
+# sudo_cmd uses the password supplied by the host for non-interactive updates
+# (web UI). The CLI path has no SUDO_PASSWORD and keeps interactive sudo.
+sudo_cmd() {
+    if [[ -n "${SUDO_PASSWORD:-}" ]]; then
+        printf '%s\n' "$SUDO_PASSWORD" | sudo -S -p '' "$@"
+    else
+        sudo "$@"
+    fi
+}
 
 if [[ -z "$TARGET" ]]; then
     echo "Usage: $0 <target> [options]"
@@ -36,12 +47,12 @@ case "$TARGET" in
         ;;
     os)
         echo "Updating system packages..."
-        sudo apt update
+        sudo_cmd apt update
         if [[ "$EXTRA" == "-y" || "$EXTRA" == "--yes" ]]; then
             echo "Running non-interactive dist-upgrade..."
-            sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get -y dist-upgrade
+            sudo_cmd env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get -y dist-upgrade
         else
-            sudo apt dist-upgrade
+            sudo_cmd apt dist-upgrade
         fi
         if [[ -f /var/run/reboot-required ]]; then
             echo "Reboot required."
