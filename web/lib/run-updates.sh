@@ -18,7 +18,7 @@ fi
 rc=0
 for target in "$@"; do
     echo ""
-    echo "=== Mise à jour: $target ==="
+    echo "=== Update: $target ==="
 
     args=(update "$target")
     if [[ "$target" == "os" ]]; then

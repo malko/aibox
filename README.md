@@ -192,6 +192,11 @@ services for `service-remove` and `tunnel lan on/off`, snapshot names for
 ./aibox restart               # Restart VM (tunnel reconnects automatically)
 ```
 
+`aibox status` also reports whether each service port is listening in the VM:
+`[up]`, `[down]` or `[unknown]` (the VM is off or the check could not run). The
+check runs inside the VM, because the host port always accepts connections
+while the tunnel is up, even when the guest service is down.
+
 ### Web interface
 
 `aibox web` starts a local web console and opens it in your browser:
@@ -204,9 +209,9 @@ services for `service-remove` and `tunnel lan on/off`, snapshot names for
 
 It listens on `127.0.0.1` only and requires BusyBox with the `httpd` applet.
 The server runs in the foreground: press `Ctrl+C` to stop it, or use the
-**fermer** button in the header. Closing the browser tab also stops it after a
-short grace period; a reload cancels that delayed stop. Nothing keeps running
-in the background.
+**close / fermer** button in the header. Closing the browser tab also stops it
+after a short grace period; a reload cancels that delayed stop. Nothing keeps
+running in the background.
 
 The console provides:
 
@@ -219,7 +224,13 @@ The console provides:
 - setup status detection and replay of safe setup steps; steps that need root
   ask for the same sudo password;
 - running operations show their log and can be killed from the console;
-- LAN hostname setting for service URLs.
+- LAN hostname setting for service URLs;
+- interface language: English (default) or French;
+- a live availability indicator per service: a green dot when the port is
+  listening in the VM, a red dot when it is closed.
+
+The interface language is selected in the **réglages / settings** section and
+is remembered in the browser (`localStorage`). The default is English.
 
 The access token is stored in `~/.config/aibox/web-token` (mode `600`) and is
 passed to the browser in the URL fragment. The API requires it as a bearer
@@ -463,7 +474,7 @@ aibox/
 │   ├── update-check.sh          # Gather available updates
 │   └── install-update-check.sh  # Install the update check timer
 ├── web/                         # Local web console
-│   ├── public/                  # HTML/CSS/JS and BusyBox CGI
+│   ├── public/                  # HTML/CSS/JS and BusyBox CGI (i18n.js = translations)
 │   └── lib/                     # CGI helpers and job runner
 ├── services-funcs.sh            # services.json + per-service LAN state
 └── shared-funcs.sh              # Common functions

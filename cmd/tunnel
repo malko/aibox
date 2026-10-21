@@ -155,13 +155,26 @@ service_urls() {
     local show_tokens="${1:-}"
     [[ -f "$SERVICES_FILE" ]] || return 0
 
-    local name port host guest suffix auth mode until
+    local name port host guest suffix auth mode until state_label
+    local probe_guest_ip=""
+
+    if [[ "$(vm_state "$VM_NAME")" == "running" ]]; then
+        probe_guest_ip=$(vm_ip "$VM_NAME")
+    fi
+    probe_service_states "$probe_guest_ip"
+
     while IFS=$'\t' read -r name port; do
         [[ -z "$name" || -z "$port" ]] && continue
         host="${port%%:*}"
         guest="${port#*:}"
         suffix=""
         auth=""
+
+        case "${PROBE_STATE[$guest]:-}" in
+            up) state_label="up" ;;
+            down) state_label="down" ;;
+            *) state_label="unknown" ;;
+        esac
 
         if [[ "$show_tokens" == "tokens" ]]; then
             suffix=$(guest_dsh_suffix "$guest")
@@ -172,23 +185,140 @@ service_urls() {
             fi
         fi
 
-        printf '  %-14s http://localhost:%s%s%s\n' "$name" "$host" "$suffix" "$auth"
+        printf '  %-14s http://localhost:%s%s%s  [%s]\n' "$name" "$host" "$suffix" "$auth" "$state_label"
 
         mode=$(service_effective_lan "$name")
         if [[ "$mode" == "permanent" ]]; then
-            printf '  %-14s http://%s:%s%s  (LAN permanent)%s\n' \
-                "$name" "$(host_local_name)" "$host" "$suffix" "$auth"
+            printf '  %-14s http://%s:%s%s  (LAN permanent)%s  [%s]\n' \
+                "$name" "$(host_local_name)" "$host" "$suffix" "$auth" "$state_label"
         elif [[ "$mode" == "temporary" ]]; then
             until=$(service_lan_until "$name")
             if [[ "$until" =~ ^[0-9]+$ ]] && [[ "$until" -gt 0 ]]; then
-                printf '  %-14s http://%s:%s%s  (LAN temporary until %s)%s\n' \
-                    "$name" "$(host_local_name)" "$host" "$suffix" "$(format_epoch "$until")" "$auth"
+                printf '  %-14s http://%s:%s%s  (LAN temporary until %s)%s  [%s]\n' \
+                    "$name" "$(host_local_name)" "$host" "$suffix" "$(format_epoch "$until")" "$auth" "$state_label"
             else
-                printf '  %-14s http://%s:%s%s  (LAN temporary until reboot)%s\n' \
-                    "$name" "$(host_local_name)" "$host" "$suffix" "$auth"
+                printf '  %-14s http://%s:%s%s  (LAN temporary until reboot)%s  [%s]\n' \
+                    "$name" "$(host_local_name)" "$host" "$suffix" "$auth" "$state_label"
             fi
         fi
     done < <(services_entries)
+}
+
+# --- Service availability probe ---------------------------------------------
+#
+# The host port always accepts connections while the tunnel is up, even when
+# the guest service is down, so the check has to run inside the VM: it tests
+# whether the guest port is listening on 127.0.0.1. One SSH round trip covers
+# every port. The result is cached for a few seconds because the web console
+# polls the status regularly.
+
+PROBE_CACHE_DIR="${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox"
+PROBE_CACHE_FILE="$PROBE_CACHE_DIR/service-probe.cache"
+# The web console polls the status every few seconds: the probe result is
+# cached to avoid one SSH round trip per poll.
+PROBE_CACHE_TTL=10
+
+file_mtime() {
+    local mtime
+    mtime=$(stat -c %Y "$1" 2>/dev/null) || mtime=$(stat -f %m "$1" 2>/dev/null) || mtime=0
+    printf '%s\n' "$mtime"
+}
+
+# probe_cache_load <key>: prints the cached "<port> <up|down>" lines when the
+# cache is fresh and was taken for the same key (guest IP and port list).
+probe_cache_load() {
+    local key="$1" now mtime cached_key
+    [[ -f "$PROBE_CACHE_FILE" ]] || return 1
+    now=$(date +%s)
+    mtime=$(file_mtime "$PROBE_CACHE_FILE")
+    [[ "$mtime" =~ ^[0-9]+$ ]] || return 1
+    if (( now - mtime > PROBE_CACHE_TTL )); then
+        return 1
+    fi
+    cached_key=$(head -n1 "$PROBE_CACHE_FILE" 2>/dev/null || true)
+    [[ "$cached_key" == "$key" ]] || return 1
+    tail -n +2 "$PROBE_CACHE_FILE"
+}
+
+# probe_cache_store <key> <probe output>
+probe_cache_store() {
+    local key="$1" output="$2"
+    mkdir -p "$PROBE_CACHE_DIR" 2>/dev/null || return 0
+    {
+        printf '%s\n' "$key"
+        printf '%s\n' "$output"
+    } > "$PROBE_CACHE_FILE.tmp" 2>/dev/null || return 0
+    mv -f "$PROBE_CACHE_FILE.tmp" "$PROBE_CACHE_FILE" 2>/dev/null || rm -f "$PROBE_CACHE_FILE.tmp"
+    return 0
+}
+
+# guest_probe_ports <guest_ip> <port>...
+# Prints one "<port> up" or "<port> down" line per port. Uses bash /dev/tcp in
+# the guest so no extra tool is needed there.
+guest_probe_ports() {
+    local ip="$1"
+    shift
+    local ports=("$@")
+    if [[ ${#ports[@]} -eq 0 ]]; then
+        return 0
+    fi
+    if [[ -z "$ip" ]]; then
+        return 1
+    fi
+
+    # The ports are passed as arguments: the heredoc stays unexpanded, so the
+    # guest shell is the only one interpreting the loop.
+    ssh -o BatchMode=yes -o ConnectTimeout=5 "$GUEST_USER@$ip" bash -s -- "${ports[@]}" <<'PROBE' 2>/dev/null
+for p in "$@"; do
+    if (exec 3<>/dev/tcp/127.0.0.1/"$p") 2>/dev/null; then
+        echo "$p up"
+    else
+        echo "$p down"
+    fi
+done
+PROBE
+}
+
+# probe_service_states <guest_ip>
+# Fills the global PROBE_STATE array with "<guest port>" -> "up" | "down".
+# The guest IP is empty when the VM is not running: nothing is probed then.
+declare -A PROBE_STATE=()
+
+probe_service_states() {
+    local guest_ip="$1"
+    local -a probe_ports=()
+    local pname pport probe_port probe_state probe_key probe_output
+
+    PROBE_STATE=()
+
+    if [[ -z "$guest_ip" ]]; then
+        return 0
+    fi
+
+    while IFS=$'\t' read -r pname pport; do
+        [[ -n "$pname" && -n "$pport" ]] || continue
+        probe_ports+=("${pport#*:}")
+    done < <(services_entries)
+
+    if [[ ${#probe_ports[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    probe_key="$guest_ip ${probe_ports[*]}"
+    probe_output=$(probe_cache_load "$probe_key" || true)
+    if [[ -z "$probe_output" ]]; then
+        probe_output=$(guest_probe_ports "$guest_ip" "${probe_ports[@]}" || true)
+        if [[ -n "$probe_output" ]]; then
+            probe_cache_store "$probe_key" "$probe_output"
+        fi
+    fi
+
+    while read -r probe_port probe_state; do
+        [[ -n "$probe_port" ]] || continue
+        PROBE_STATE["$probe_port"]="$probe_state"
+    done <<< "$probe_output"
+
+    return 0
 }
 
 # tunnel_status_json [tokens]
@@ -200,6 +330,7 @@ tunnel_status_json() {
     local permanent_count=0 temporary_count=0
     local name port host guest mode until until_json suffix password url_local url_lan
     local services_tmp services_json="[]"
+    local port_open
 
     if vm_exists "$VM_NAME"; then
         vm_exists_json=true
@@ -220,6 +351,9 @@ tunnel_status_json() {
             tunnel_status="not installed"
         fi
     fi
+
+    # Check which guest ports are listening (one SSH round trip for all).
+    probe_service_states "$guest_ip"
 
     lan_host=$(host_local_name)
     services_tmp=$(mktemp) || return 1
@@ -258,6 +392,14 @@ tunnel_status_json() {
             temporary) temporary_count=$((temporary_count + 1)) ;;
         esac
 
+        # port_open: true when the guest port is listening, false when it is
+        # closed, null when the state is unknown (VM off, probe failed).
+        port_open="null"
+        case "${PROBE_STATE[$guest]:-}" in
+            up) port_open="true" ;;
+            down) port_open="false" ;;
+        esac
+
         jq -n \
             --arg name "$name" \
             --arg port "$port" \
@@ -265,6 +407,7 @@ tunnel_status_json() {
             --arg guest_port "$guest" \
             --arg lan "$mode" \
             --argjson until "$until_json" \
+            --argjson port_open "$port_open" \
             --arg url_local "$url_local" \
             --arg url_lan "$url_lan" \
             --arg password "$password" \
@@ -275,6 +418,7 @@ tunnel_status_json() {
                 guest_port: $guest_port,
                 lan: $lan,
                 until: $until,
+                port_open: $port_open,
                 url_local: $url_local,
                 url_lan: (if $url_lan == "" then null else $url_lan end),
                 password: (if $password == "" then null else $password end)

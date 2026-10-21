@@ -231,20 +231,20 @@ $("$AIBOX_BIN" tunnel lan on "$target_name" --timeout "$TIMEOUT" --yes 2>>"$erro
 
         case "$ACTION" in
             start)
-                job_start "Démarrage de la VM" start || exit 0
+                job_start "Starting the VM" start || exit 0
                 ;;
             shutdown)
                 if [[ "$FORCE" == "true" ]]; then
-                    job_start "Arrêt forcé de la VM" shutdown -f || exit 0
+                    job_start "Forced VM shutdown" shutdown -f || exit 0
                 else
-                    job_start "Arrêt de la VM" shutdown || exit 0
+                    job_start "VM shutdown" shutdown || exit 0
                 fi
                 ;;
             restart)
                 if [[ "$FORCE" == "true" ]]; then
-                    job_start "Redémarrage forcé de la VM" restart -f || exit 0
+                    job_start "Forced VM restart" restart -f || exit 0
                 else
-                    job_start "Redémarrage de la VM" restart || exit 0
+                    job_start "VM restart" restart || exit 0
                 fi
                 ;;
             *)
@@ -269,7 +269,7 @@ $("$AIBOX_BIN" tunnel lan on "$target_name" --timeout "$TIMEOUT" --yes 2>>"$erro
         ;;
 
     "POST updates/check")
-        job_start "Vérification des mises à jour" check-updates || exit 0
+        job_start "Checking for updates" check-updates || exit 0
         ;;
 
     "POST updates/apply")
@@ -321,12 +321,12 @@ $("$AIBOX_BIN" tunnel lan on "$target_name" --timeout "$TIMEOUT" --yes 2>>"$erro
         if [[ -n "$SUDO_PASSWORD" ]]; then
             AIBOX_JOB_PASSWORD="$SUDO_PASSWORD"
         fi
-        job_start_raw "Mise à jour: ${TARGETS[*]}" "${args[@]}" || exit 0
+        job_start_raw "Update: ${TARGETS[*]}" "${args[@]}" || exit 0
         unset AIBOX_JOB_PASSWORD
         ;;
 
     "POST self-update")
-        job_start "Mise à jour de aibox" self-update || exit 0
+        job_start "Updating aibox" self-update || exit 0
         ;;
 
     "POST setup/run")

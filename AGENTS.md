@@ -13,8 +13,13 @@ This repository contains bash scripts for managing an AI development VM with KVM
   - `host/tunnel.sh` - Tunnel service entry point (ssh -N, one -L per service, per-service bind)
   - `host/service.sh` + `host/services/` - User service manager (systemd --user)
   - `services-funcs.sh` - `services.json` helpers and per-service LAN state
+  - `cmd/tunnel` - Tunnel lifecycle, LAN exposure and `status --json`; also
+    probes the guest ports (one SSH round trip, cached) to report whether each
+    service is really listening (`port_open`)
   - `cmd/` - Service and VM management commands
   - `web/` - Local web console (BusyBox httpd, CGI bash, vanilla HTML/CSS/JS)
+    - `web/public/i18n.js` - Translation catalogs (`en` default, `fr`); static
+      text uses `data-i18n` attributes, dynamic text uses `t("key", params)`
 
 ## Commands
 

@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
-<title>AIBox — console locale</title>
+<title data-i18n="app.title">AIBox — local console</title>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 </head>
@@ -14,79 +14,78 @@
     <div class="brand">
       <div class="brand-main">
         <span class="brand-name">AIBOX</span>
-        <span class="brand-sub">// console locale</span>
+        <span class="brand-tagline">your AI, in its own box</span>
       </div>
-      <div class="brand-tagline">your AI, in its own box</div>
     </div>
     <div class="masthead-status">
       <span class="badge" id="vm-badge">VM <b>—</b></span>
       <span class="badge" id="tunnel-badge">TUNNEL <b>—</b></span>
       <span class="mono muted" id="vm-ip">—</span>
-      <button class="btn btn-ghost btn-sm" id="quit-web-top" type="button" title="Arrêter le service et fermer l'interface">fermer</button>
+      <button class="btn btn-ghost btn-sm" id="quit-web-top" type="button" data-i18n="common.close" data-i18n-title="quit.closeTitle">close</button>
     </div>
   </header>
 
-  <nav class="tabs" aria-label="Sections">
-    <button class="tab active" data-tab="overview">vue d'ensemble</button>
-    <button class="tab" data-tab="services">services</button>
-    <button class="tab" data-tab="updates">mises à jour</button>
-    <button class="tab" data-tab="setup">installation</button>
-    <button class="tab" data-tab="settings">réglages</button>
+  <nav class="tabs" data-i18n-aria-label="nav.sections" aria-label="Sections">
+    <button class="tab active" data-tab="overview" data-i18n="tab.overview">overview</button>
+    <button class="tab" data-tab="services" data-i18n="tab.services">services</button>
+    <button class="tab" data-tab="updates" data-i18n="tab.updates">updates</button>
+    <button class="tab" data-tab="setup" data-i18n="tab.setup">setup</button>
+    <button class="tab" data-tab="settings" data-i18n="tab.settings">settings</button>
   </nav>
 
   <main>
     <section class="tab-panel active" id="tab-overview">
       <div class="section-head">
-        <h1>vue d'ensemble</h1>
-        <button class="btn btn-ghost" id="refresh-overview">rafraîchir</button>
+        <h1 data-i18n="tab.overview">overview</h1>
+        <button class="btn btn-ghost" id="refresh-overview" data-i18n="common.refresh">refresh</button>
       </div>
 
       <div class="grid-2">
         <section class="panel">
           <div class="panel-head">
-            <h2>machine virtuelle</h2>
+            <h2 data-i18n="vm.title">virtual machine</h2>
             <span class="status-dot" id="vm-dot"></span>
           </div>
           <dl class="kv">
-            <dt>nom</dt><dd class="mono" id="vm-name">—</dd>
-            <dt>état</dt><dd class="mono" id="vm-state">—</dd>
-            <dt>adresse</dt><dd class="mono" id="vm-address">—</dd>
+            <dt data-i18n="common.name">Name</dt><dd class="mono" id="vm-name">—</dd>
+            <dt data-i18n="common.state">State</dt><dd class="mono" id="vm-state">—</dd>
+            <dt data-i18n="common.address">Address</dt><dd class="mono" id="vm-address">—</dd>
           </dl>
           <div class="actions">
-            <button class="btn btn-primary" data-vm="start">démarrer</button>
-            <button class="btn" data-vm="restart">redémarrer</button>
-            <button class="btn btn-danger" data-vm="shutdown">arrêter</button>
-            <label class="check"><input type="checkbox" id="vm-force"> forcer</label>
+            <button class="btn btn-primary" data-vm="start" data-i18n="common.start">start</button>
+            <button class="btn" data-vm="restart" data-i18n="common.restart">restart</button>
+            <button class="btn btn-danger" data-vm="shutdown" data-i18n="common.stop">stop</button>
+            <label class="check" data-i18n-title="vm.forceHint" title="Force the action: the VM is stopped or restarted immediately, without a clean shutdown."><input type="checkbox" id="vm-force"> <span data-i18n="common.force">force</span></label>
           </div>
         </section>
 
         <section class="panel">
           <div class="panel-head">
-            <h2>tunnel</h2>
+            <h2 data-i18n="tunnel.title">tunnel</h2>
             <span class="status-dot" id="tunnel-dot"></span>
           </div>
           <dl class="kv">
-            <dt>service</dt><dd class="mono" id="tunnel-status">—</dd>
-            <dt>services</dt><dd class="mono" id="tunnel-count">—</dd>
-            <dt>lan</dt><dd class="mono" id="lan-count">—</dd>
+            <dt data-i18n="common.service">Service</dt><dd class="mono" id="tunnel-status">—</dd>
+            <dt data-i18n="common.services">Services</dt><dd class="mono" id="tunnel-count">—</dd>
+            <dt data-i18n="common.lan">LAN</dt><dd class="mono" id="lan-count">—</dd>
           </dl>
           <div class="actions">
-            <button class="btn" data-tunnel="start">démarrer</button>
-            <button class="btn" data-tunnel="restart">redémarrer</button>
-            <button class="btn btn-danger" data-tunnel="stop">arrêter</button>
+            <button class="btn" data-tunnel="start" data-i18n="common.start">start</button>
+            <button class="btn" data-tunnel="restart" data-i18n="common.restart">restart</button>
+            <button class="btn btn-danger" data-tunnel="stop" data-i18n="common.stop">stop</button>
           </div>
         </section>
       </div>
 
       <section class="panel">
         <div class="panel-head">
-          <h2>services exposés</h2>
+          <h2 data-i18n="overview.exposedServices">exposed services</h2>
           <span class="mono muted" id="services-summary">—</span>
         </div>
         <div class="table-wrap">
           <table class="table">
             <thead>
-              <tr><th>nom</th><th>port</th><th>lan</th><th>localhost</th><th>lan</th></tr>
+              <tr><th data-i18n="common.name">Name</th><th data-i18n="common.port">Port</th><th data-i18n="common.lan">LAN</th><th data-i18n="common.localhost">localhost</th><th data-i18n="common.lan">LAN</th></tr>
             </thead>
             <tbody id="overview-services"></tbody>
           </table>
@@ -95,10 +94,10 @@
 
       <section class="panel" id="active-job-panel" hidden>
         <div class="panel-head">
-          <h2 id="active-job-title">opération en cours</h2>
+          <h2 id="active-job-title" data-i18n="job.inProgress">operation in progress</h2>
           <div class="actions">
-            <button class="btn btn-ghost" id="active-job-log">voir le journal</button>
-            <button class="btn btn-danger" id="active-job-cancel">kill</button>
+            <button class="btn btn-ghost" id="active-job-log" data-i18n="job.showLog">show the log</button>
+            <button class="btn btn-danger" id="active-job-cancel" data-i18n="job.kill">kill</button>
           </div>
         </div>
         <div class="progress"><span id="active-job-bar"></span></div>
@@ -108,17 +107,17 @@
 
     <section class="tab-panel" id="tab-services">
       <div class="section-head">
-        <h1>services</h1>
+        <h1 data-i18n="tab.services">services</h1>
         <div class="actions">
-          <button class="btn btn-ghost" id="refresh-services">rafraîchir</button>
-          <button class="btn btn-primary" id="add-service">ajouter</button>
+          <button class="btn btn-ghost" id="refresh-services" data-i18n="common.refresh">refresh</button>
+          <button class="btn btn-primary" id="add-service" data-i18n="common.add">add</button>
         </div>
       </div>
-      <p class="hint">Les services sont exposés depuis la VM via le tunnel SSH. Un service en mode LAN est joignable avec le nom d'hôte configuré dans les réglages.</p>
+      <p class="hint" data-i18n="services.hint">Services are exposed from the VM through the SSH tunnel. A service in LAN mode is reachable with the hostname configured in the settings.</p>
       <div class="table-wrap">
         <table class="table">
           <thead>
-            <tr><th>nom</th><th>hôte:invité</th><th>lan</th><th>localhost</th><th>lan</th><th class="actions-cell">actions</th></tr>
+            <tr><th data-i18n="common.name">Name</th><th data-i18n="services.hostGuest">host:guest</th><th data-i18n="common.lan">LAN</th><th data-i18n="common.localhost">localhost</th><th data-i18n="common.lan">LAN</th><th class="actions-cell" data-i18n="common.actions">Actions</th></tr>
           </thead>
           <tbody id="services-body"></tbody>
         </table>
@@ -127,33 +126,33 @@
 
     <section class="tab-panel" id="tab-updates">
       <div class="section-head">
-        <h1>mises à jour</h1>
+        <h1 data-i18n="tab.updates">updates</h1>
         <div class="actions">
-          <button class="btn btn-ghost" id="refresh-updates">rafraîchir</button>
-          <button class="btn btn-primary" id="check-updates">vérifier</button>
+          <button class="btn btn-ghost" id="refresh-updates" data-i18n="common.refresh">refresh</button>
+          <button class="btn btn-primary" id="check-updates" data-i18n="updates.check">check</button>
         </div>
       </div>
       <div class="grid-3">
         <section class="panel stat">
-          <span class="stat-label">dépôt aibox</span>
+          <span class="stat-label" data-i18n="updates.repoLabel">aibox repository</span>
           <strong class="stat-value" id="update-repo">—</strong>
           <span class="stat-detail mono muted" id="update-repo-detail">—</span>
         </section>
         <section class="panel stat">
-          <span class="stat-label">paquets apt</span>
+          <span class="stat-label" data-i18n="updates.aptLabel">apt packages</span>
           <strong class="stat-value" id="update-apt">—</strong>
           <span class="stat-detail mono muted" id="update-reboot">—</span>
         </section>
         <section class="panel stat">
-          <span class="stat-label">npm</span>
+          <span class="stat-label" data-i18n="updates.npmLabel">npm</span>
           <strong class="stat-value" id="update-npm">—</strong>
           <span class="stat-detail mono muted" id="update-vscode">—</span>
         </section>
       </div>
       <section class="panel">
         <div class="panel-head">
-          <h2>appliquer</h2>
-          <button class="btn btn-ghost" id="self-update">mettre à jour aibox</button>
+          <h2 data-i18n="updates.apply">apply</h2>
+          <button class="btn btn-ghost" id="self-update" data-i18n="updates.selfUpdate">update aibox</button>
         </div>
         <div class="update-selection" id="update-actions">
           <label class="select-chip"><input type="checkbox" data-update-target="scripts"> scripts</label>
@@ -162,53 +161,64 @@
           <label class="select-chip"><input type="checkbox" data-update-target="dsh"> dsh</label>
           <label class="select-chip"><input type="checkbox" data-update-target="claude"> claude</label>
           <label class="select-chip"><input type="checkbox" data-update-target="vscode-server"> vscode-server</label>
-          <label class="select-chip select-all"><input type="checkbox" id="update-all"> tout</label>
+          <label class="select-chip select-all"><input type="checkbox" id="update-all"> <span data-i18n="common.all">all</span></label>
         </div>
         <div class="actions">
-          <button class="btn btn-primary" id="apply-updates">mettre à jour la sélection</button>
+          <button class="btn btn-primary" id="apply-updates" data-i18n="updates.applySelection">update selection</button>
         </div>
-        <p class="hint">Les cibles sélectionnées sont mises à jour dans l'ordre, en s'arrêtant à la première erreur. Une mise à jour « os » est lancée en mode non interactif et demande le mot de passe sudo.</p>
+        <p class="hint" data-i18n="updates.hint">Selected targets are updated in order, stopping at the first error. An "os" update runs in non-interactive mode and asks for the sudo password.</p>
       </section>
     </section>
 
     <section class="tab-panel" id="tab-setup">
       <div class="section-head">
-        <h1>installation</h1>
-        <button class="btn btn-ghost" id="refresh-setup">rafraîchir</button>
+        <h1 data-i18n="tab.setup">setup</h1>
+        <button class="btn btn-ghost" id="refresh-setup" data-i18n="common.refresh">refresh</button>
       </div>
-      <p class="hint">Détection à partir de la configuration et d'un sondage de la VM. Les étapes marquées « cli » doivent être lancées depuis le terminal.</p>
+      <p class="hint" data-i18n="setup.hint">Detection based on the configuration and a probe of the VM. Steps marked "cli" must be run from the terminal.</p>
       <div class="table-wrap">
         <table class="table">
           <thead>
-            <tr><th>étape</th><th>statut</th><th>description</th><th></th></tr>
+            <tr><th data-i18n="common.step">Step</th><th data-i18n="common.status">Status</th><th data-i18n="common.description">Description</th><th></th></tr>
           </thead>
           <tbody id="setup-body"></tbody>
         </table>
       </div>
-      <label class="check"><input type="checkbox" id="setup-with-deps"> exécuter aussi les prérequis</label>
+      <label class="check"><input type="checkbox" id="setup-with-deps"> <span data-i18n="setup.withDeps">also run the prerequisites</span></label>
     </section>
 
     <section class="tab-panel" id="tab-settings">
       <div class="section-head">
-        <h1>réglages</h1>
-        <button class="btn btn-ghost" id="refresh-settings">rafraîchir</button>
+        <h1 data-i18n="tab.settings">settings</h1>
+        <button class="btn btn-ghost" id="refresh-settings" data-i18n="common.refresh">refresh</button>
       </div>
       <section class="panel">
-        <div class="panel-head"><h2>nom d'hôte LAN</h2></div>
-        <p class="hint">Utilisé pour les liens des services exposés sur le LAN. Vide = nom automatique (<span class="mono" id="lan-auto">—</span>). Le nom doit être résolu par les clients (mDNS, DNS ou /etc/hosts).</p>
+        <div class="panel-head"><h2 data-i18n="settings.lanHostname">LAN hostname</h2></div>
+        <p class="hint" data-i18n="settings.lanHint">Used for the links of services exposed on the LAN. Empty = automatic name. The name must be resolvable by the clients (mDNS, DNS or /etc/hosts).</p>
         <form id="settings-form" class="form-row">
-          <label for="lan-hostname">nom d'hôte</label>
+          <label for="lan-hostname" data-i18n="settings.hostnameLabel">hostname</label>
           <input class="input mono" id="lan-hostname" name="lan_hostname" placeholder="desk.local" autocomplete="off" spellcheck="false">
-          <button class="btn btn-primary" type="submit">enregistrer</button>
-          <button class="btn" type="button" id="lan-hostname-auto">auto</button>
+          <button class="btn btn-primary" type="submit" data-i18n="common.save">save</button>
+          <button class="btn" type="button" id="lan-hostname-auto" data-i18n="common.auto">auto</button>
         </form>
         <p class="mono muted" id="settings-current">—</p>
       </section>
       <section class="panel">
-        <div class="panel-head"><h2>session</h2></div>
-        <p class="hint">L'interface écoute uniquement sur 127.0.0.1. La fermer depuis ce bouton arrête le service ; aucun processus ne reste en arrière-plan.</p>
+        <div class="panel-head"><h2 data-i18n="settings.language">language</h2></div>
+        <p class="hint" data-i18n="settings.languageHint">Language of the web interface. The default is English.</p>
+        <div class="form-row">
+          <label for="language-select" data-i18n="settings.languageSelect">interface language</label>
+          <select class="input mono" id="language-select">
+            <option value="en">English</option>
+            <option value="fr">Français</option>
+          </select>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2 data-i18n="settings.session">session</h2></div>
+        <p class="hint" data-i18n="settings.sessionHint">The interface listens on 127.0.0.1 only. Closing it from this button stops the service; no process is left behind.</p>
         <div class="actions">
-          <button class="btn btn-danger" id="quit-web">quitter l'interface</button>
+          <button class="btn btn-danger" id="quit-web" data-i18n="settings.quit">quit the interface</button>
         </div>
       </section>
     </section>
@@ -216,7 +226,7 @@
 
   <footer class="footer">
     <span class="mono">aibox web</span>
-    <span class="mono muted" id="footer-status">connexion…</span>
+    <span class="mono muted" id="footer-status">connecting…</span>
     <span class="mono muted">127.0.0.1</span>
   </footer>
 </div>
@@ -225,7 +235,7 @@
   <div class="dialog-inner">
     <header class="dialog-head">
       <h2 id="dialog-title">—</h2>
-      <button class="btn btn-ghost" type="button" id="dialog-close" aria-label="Fermer">×</button>
+      <button class="btn btn-ghost" type="button" id="dialog-close" data-i18n-aria-label="common.close" aria-label="Close">×</button>
     </header>
     <div id="dialog-body" class="dialog-body"></div>
     <footer class="dialog-actions" id="dialog-actions"></footer>
@@ -233,6 +243,7 @@
 </dialog>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="i18n.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

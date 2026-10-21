@@ -17,10 +17,151 @@ const state = {
   quitting: false,
   busy: false,
   sessionId: "",
+  footerStatusKey: "status.connecting",
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+
+/* i18n --------------------------------------------------------------------- */
+
+const t = (key, params) => window.i18n.t(key, params);
+const currentLang = () => window.i18n.getLang();
+
+/* The footer status is set at runtime: it is stored as a key so a language
+   switch can re-translate it without losing the live state. */
+function setFooterStatus(key) {
+  state.footerStatusKey = key;
+  $("#footer-status").textContent = t(key);
+}
+
+/* Machine values returned by the API are translated here. The raw value is
+   kept as a fallback, so an unknown state is still displayed. */
+const STATE_LABELS = {
+  vm: {
+    running: "state.vm.running",
+    "shut off": "state.vm.off",
+    paused: "state.vm.paused",
+    pmsuspended: "state.vm.suspended",
+    crashed: "state.vm.crashed",
+    unknown: "state.vm.unknown",
+  },
+  tunnel: {
+    active: "state.tunnel.active",
+    inactive: "state.tunnel.inactive",
+    "not installed": "state.tunnel.notInstalled",
+    unsupported: "state.tunnel.unsupported",
+    failed: "state.tunnel.failed",
+    unknown: "state.tunnel.unknown",
+  },
+  setup: {
+    installed: "state.setup.installed",
+    missing: "state.setup.missing",
+    unknown: "state.setup.unknown",
+    disabled: "state.setup.disabled",
+  },
+};
+
+function stateLabel(kind, value) {
+  if (!value) return "—";
+  const key = STATE_LABELS[kind]?.[value];
+  if (key) return t(key);
+  // "failed (exit-code)": keep the detail, translate the prefix.
+  if (kind === "tunnel" && value.startsWith("failed")) {
+    return t("state.tunnel.failed") + value.slice("failed".length);
+  }
+  return value;
+}
+
+/* Setup step descriptions come from the server in English: they are matched
+   by step name and translated here. */
+const SETUP_STEP_KEYS = [
+  "vm", "ssh", "scripts", "deps", "sshd", "git", "dirs", "hosts", "motd",
+  "docker", "vscode", "opencode", "dsh", "claude", "update-check", "virtiofs",
+  "cli", "tunnel",
+];
+
+/* Same for the reason shown under a step. */
+const SETUP_REASON_KEYS = {
+  "VM creation is CLI-only": "setup.reason.cliOnly",
+  "SSH setup may ask for a password": "setup.reason.password",
+  "vscode-server asks for a password": "setup.reason.password",
+  "modifies the host libvirt configuration": "setup.reason.hostConfig",
+  "disabled in config": "setup.reason.disabled",
+  "VM is not running or not reachable": "setup.reason.unreachable",
+};
+
+function setupStepDescription(step) {
+  return SETUP_STEP_KEYS.includes(step.name) ? t(`setup.step.${step.name}`) : step.description;
+}
+
+function setupStepReason(step) {
+  if (!step.reason) return "";
+  const key = SETUP_REASON_KEYS[step.reason];
+  return key ? t(key) : step.reason;
+}
+
+/* API error messages are returned in English by the CGI: they are matched
+   here so the toasts follow the interface language. Anything not listed is
+   shown as-is (errors forwarded from the aibox CLI). */
+const API_ERROR_KEYS = {
+  "aibox command failed": "error.api.commandFailed",
+  "could not add service": "error.api.addFailed",
+  "could not update service": "error.api.updateFailed",
+  "could not read setup status": "error.api.setupStatusFailed",
+  "could not resolve service URL": "error.api.serviceUrlFailed",
+  "another operation is running": "error.api.busy",
+  "expected": "error.api.method",
+  "invalid Content-Length": "error.api.contentLength",
+  "invalid Host header": "error.api.host",
+  "invalid job id": "error.api.jobId",
+  "invalid JSON body": "error.api.jsonBody",
+  "invalid LAN hostname": "error.api.lanHostname",
+  "invalid LAN mode": "error.api.lanMode",
+  "invalid new service name": "error.api.newServiceName",
+  "invalid Origin header": "error.api.origin",
+  "invalid or missing token": "error.api.token",
+  "invalid port": "error.api.port",
+  "invalid quit delay": "error.api.quitDelay",
+  "invalid service name": "error.api.serviceName",
+  "invalid session id": "error.api.sessionId",
+  "invalid setup step": "error.api.setupStep",
+  "invalid timeout": "error.api.timeout",
+  "invalid tunnel action": "error.api.tunnelAction",
+  "invalid update target": "error.api.updateTarget",
+  "invalid VM action": "error.api.vmAction",
+  "invalid web PID": "error.api.webPid",
+  "job not found": "error.api.jobNotFound",
+  "no update target selected": "error.api.noTarget",
+  "request body is too large": "error.api.bodyTooLarge",
+  "service not found": "error.api.serviceNotFound",
+  "sudo password is required for OS updates": "error.api.sudoOs",
+  "sudo password is required for this setup step": "error.api.sudoSetup",
+  "targets must be an array": "error.api.targetsArray",
+  "the VM must be running for this setup step": "error.api.vmRequired",
+  "this setup step is not available from the web UI": "error.api.stepUnavailable",
+  "unknown route": "error.api.unknownRoute",
+  "web PID file not found": "error.api.webPidMissing",
+  "web token is missing; restart aibox web": "error.api.webTokenMissing",
+};
+
+/* Messages ending with a dynamic part. */
+const API_ERROR_PREFIX_KEYS = {
+  "another operation is running (": "error.api.busyDetail",
+  "expected ": "error.api.methodDetail",
+  "invalid update target: ": "error.api.updateTargetDetail",
+};
+
+function translateApiError(message) {
+  if (!message) return message;
+  if (API_ERROR_KEYS[message]) return t(API_ERROR_KEYS[message]);
+  for (const [prefix, key] of Object.entries(API_ERROR_PREFIX_KEYS)) {
+    if (message.startsWith(prefix)) {
+      return t(key, { detail: message.slice(prefix.length).replace(/\)$/, "") });
+    }
+  }
+  return message;
+}
 
 function el(tag, props = {}, ...children) {
   const node = document.createElement(tag);
@@ -77,7 +218,7 @@ async function cancelPendingQuit() {
 
 async function api(path, options = {}) {
   if (!state.token) {
-    throw new Error("Token absent. Relance `aibox web` pour ouvrir l'interface.");
+    throw new Error(t("error.noToken"));
   }
 
   const headers = {
@@ -101,14 +242,14 @@ async function api(path, options = {}) {
   try {
     data = await response.json();
   } catch {
-    throw new Error(`réponse invalide du serveur (HTTP ${response.status})`);
+    throw new Error(t("error.invalidResponse", { status: response.status }));
   }
 
   if (!response.ok || data.ok === false) {
     if (response.status === 401) {
-      throw new Error("Token invalide. Relance `aibox web` pour obtenir un nouveau lien.");
+      throw new Error(t("error.invalidToken"));
     }
-    throw new Error(data.error || `HTTP ${response.status}`);
+    throw new Error(translateApiError(data.error) || t("error.http", { status: response.status }));
   }
   return data;
 }
@@ -167,9 +308,9 @@ function openDialog({ title, body, actions = [] }) {
 }
 
 function promptSudoPassword({
-  title = "mot de passe sudo",
-  message = "Cette action nécessite les droits root dans la VM. Le mot de passe est transmis directement, jamais écrit sur disque ni journalisé.",
-  confirmLabel = "continuer",
+  title = t("sudo.title"),
+  message = t("sudo.message"),
+  confirmLabel = t("common.continue"),
 } = {}) {
   return new Promise((resolve) => {
     const dialog = $("#dialog");
@@ -190,20 +331,20 @@ function promptSudoPassword({
     };
     const body = el("div", {},
       el("p", { className: "hint", text: message }),
-      field("mot de passe sudo", input),
+      field(t("sudo.field"), input),
     );
 
     openDialog({
       title,
       body,
       actions: [
-        { label: "annuler", onClick: () => finish(null) },
+        { label: t("common.cancel"), onClick: () => finish(null) },
         {
           label: confirmLabel,
           className: "btn-primary",
           onClick: () => {
             if (!input.value) {
-              toast("mot de passe requis", true);
+              toast(t("sudo.required"), true);
               return;
             }
             finish(input.value);
@@ -215,7 +356,7 @@ function promptSudoPassword({
   });
 }
 
-function confirmDialog(title, message, confirmLabel = "confirmer", danger = false) {
+function confirmDialog(title, message, confirmLabel = t("common.confirm"), danger = false) {
   return new Promise((resolve) => {
     const dialog = $("#dialog");
     const finish = (value) => {
@@ -226,7 +367,7 @@ function confirmDialog(title, message, confirmLabel = "confirmer", danger = fals
       title,
       body: message,
       actions: [
-        { label: "annuler", onClick: () => finish(false) },
+        { label: t("common.cancel"), onClick: () => finish(false) },
         {
           label: confirmLabel,
           className: danger ? "btn-danger" : "btn-primary",
@@ -240,7 +381,7 @@ function confirmDialog(title, message, confirmLabel = "confirmer", danger = fals
 
 function formatEpoch(epoch) {
   if (!epoch) return "—";
-  return new Date(Number(epoch) * 1000).toLocaleString("fr-FR");
+  return new Date(Number(epoch) * 1000).toLocaleString(currentLang());
 }
 
 function stripAnsi(text) {
@@ -278,10 +419,10 @@ async function loadStatus({ quiet = false } = {}) {
     const data = await api("status");
     state.status = data;
     state.lastError = "";
-    $("#footer-status").textContent = "connecté";
+    setFooterStatus("status.connected");
     renderStatus(data);
   } catch (error) {
-    $("#footer-status").textContent = "hors ligne";
+    setFooterStatus("status.offline");
     if (!quiet || state.lastError !== error.message) {
       toast(error.message, true);
     }
@@ -297,10 +438,10 @@ function renderStatus(data) {
   const lan = data.lan || {};
 
   const vmTone = vm.running ? "ok" : vm.exists ? "warn" : "bad";
-  setBadge("#vm-badge", "VM", vm.running ? "running" : (vm.state || "unknown"), vmTone);
+  setBadge("#vm-badge", "VM", stateLabel("vm", vm.running ? "running" : (vm.state || "unknown")), vmTone);
   setStatusDot("#vm-dot", vmTone);
   $("#vm-name").textContent = vm.name || "—";
-  $("#vm-state").textContent = vm.state || "—";
+  $("#vm-state").textContent = stateLabel("vm", vm.state);
   $("#vm-address").textContent = vm.ip || "—";
   $("#vm-ip").textContent = vm.ip || "—";
 
@@ -309,29 +450,32 @@ function renderStatus(data) {
   const vmRestart = $('[data-vm="restart"]');
   const vmShutdown = $('[data-vm="shutdown"]');
   vmStart.disabled = vmActive || !vm.exists;
-  vmStart.title = !vm.exists ? "La VM n'existe pas encore" : vmActive ? "La VM est déjà démarrée" : "";
+  vmStart.title = !vm.exists ? t("vm.notExists") : vmActive ? t("vm.alreadyStarted") : "";
   vmRestart.disabled = !vmActive;
-  vmRestart.title = vmActive ? "" : "La VM n'est pas démarrée";
+  vmRestart.title = vmActive ? "" : t("vm.notStarted");
   vmShutdown.disabled = !vmActive;
-  vmShutdown.title = vmActive ? "" : "La VM n'est pas démarrée";
+  vmShutdown.title = vmActive ? "" : t("vm.notStarted");
   $("#vm-force").disabled = !vmActive;
 
   const tunnelTone = tunnel.active ? "ok" : tunnel.installed ? "warn" : "bad";
-  setBadge("#tunnel-badge", "TUNNEL", tunnel.active ? "active" : (tunnel.status || "inactive"), tunnelTone);
+  setBadge("#tunnel-badge", "TUNNEL", stateLabel("tunnel", tunnel.active ? "active" : (tunnel.status || "inactive")), tunnelTone);
   setStatusDot("#tunnel-dot", tunnelTone);
-  $("#tunnel-status").textContent = tunnel.status || "—";
+  $("#tunnel-status").textContent = stateLabel("tunnel", tunnel.status);
   $("#tunnel-count").textContent = String(services.length);
-  $("#lan-count").textContent = `${lan.permanent || 0} permanent / ${lan.temporary || 0} temporaire`;
+  $("#lan-count").textContent = t("lan.count", {
+    permanent: lan.permanent || 0,
+    temporary: lan.temporary || 0,
+  });
 
   const tunnelStart = $('[data-tunnel="start"]');
   const tunnelRestart = $('[data-tunnel="restart"]');
   const tunnelStop = $('[data-tunnel="stop"]');
   tunnelStart.disabled = tunnel.active || !tunnel.installed;
-  tunnelStart.title = !tunnel.installed ? "Le service tunnel n'est pas installé" : tunnel.active ? "Le tunnel est déjà démarré" : "";
+  tunnelStart.title = !tunnel.installed ? t("tunnel.notInstalled") : tunnel.active ? t("tunnel.alreadyStarted") : "";
   tunnelRestart.disabled = !tunnel.installed;
-  tunnelRestart.title = tunnel.installed ? "" : "Le service tunnel n'est pas installé";
+  tunnelRestart.title = tunnel.installed ? "" : t("tunnel.notInstalled");
   tunnelStop.disabled = !tunnel.active;
-  tunnelStop.title = tunnel.active ? "" : "Le tunnel n'est pas démarré";
+  tunnelStop.title = tunnel.active ? "" : t("tunnel.notStarted");
 
   state.services = services;
   renderOverviewServices(services);
@@ -341,17 +485,52 @@ function renderStatus(data) {
 }
 
 function statusPill(mode) {
-  if (mode === "permanent") return el("span", { className: "pill lan", text: "lan permanent" });
-  if (mode === "temporary") return el("span", { className: "pill lan", text: "lan temporaire" });
-  return el("span", { className: "pill", text: "localhost" });
+  if (mode === "permanent") return el("span", { className: "pill lan", text: t("lan.permanent") });
+  if (mode === "temporary") return el("span", { className: "pill lan", text: t("lan.temporary") });
+  return el("span", { className: "pill", text: t("common.localhost") });
+}
+
+/* Availability of a service, from the guest port probe done by the API.
+   - up: the port is listening in the VM and the tunnel forwards it;
+   - down: the port is closed in the VM (the tunnel is up);
+   - unknown: the VM is off, the tunnel is down or the check failed. */
+function serviceState(service) {
+  const tunnelActive = Boolean(state.status?.tunnel?.active);
+  const open = service.port_open;
+
+  if (tunnelActive && open === true) {
+    return { tone: "ok", label: t("services.state.up") };
+  }
+  if (tunnelActive && open === false) {
+    return { tone: "bad", label: t("services.state.down") };
+  }
+  return { tone: "", label: t("services.state.unknown") };
+}
+
+/* The availability dot prepended to the service name. */
+function serviceStateDot(service) {
+  const info = serviceState(service);
+  const tone = info.tone ? ` ${info.tone}` : "";
+  return el("span", { className: `status-dot${tone}`, title: info.label });
+}
+
+function serviceNameCell(service) {
+  return el("td", { className: "name" },
+    serviceStateDot(service),
+    el("span", { text: service.name }),
+  );
 }
 
 function serviceUrlLink(service, target) {
   const url = target === "lan" ? service.url_lan : service.url_local;
   if (!url) return el("span", { className: "muted", text: "—" });
 
+  // A service that is known to be down gets a red link: the URL is listed
+  // but it will not answer.
+  const down = serviceState(service).tone === "bad";
+
   const link = el("a", {
-    className: `url-link ${target}`,
+    className: `url-link ${target}${down ? " down" : ""}`,
     href: url,
     target: "_blank",
     rel: "noopener",
@@ -372,7 +551,7 @@ function serviceUrlLink(service, target) {
 async function disableLan(name) {
   try {
     await api("lan", { method: "POST", body: { name, mode: "local" } });
-    toast(`accès LAN désactivé pour ${name}`);
+    toast(t("lan.disabled", { name }));
     await loadStatus({ quiet: true });
   } catch (error) {
     toast(error.message, true);
@@ -382,19 +561,19 @@ async function disableLan(name) {
 
 function serviceActions(service) {
   const actions = el("div", { className: "row-actions" });
-  const edit = el("button", { className: "btn btn-sm", type: "button", text: "éditer" });
+  const edit = el("button", { className: "btn btn-sm", type: "button", text: t("common.edit") });
   edit.addEventListener("click", () => openServiceDialog(service));
   actions.append(edit);
 
   if (service.lan !== "local") {
-    const toggle = el("label", { className: "lan-toggle", title: "Désactiver l'accès LAN" });
+    const toggle = el("label", { className: "lan-toggle", title: t("lan.disableTitle") });
     const checkbox = el("input", { type: "checkbox", checked: true });
     checkbox.addEventListener("change", async () => {
       if (checkbox.checked) return;
       checkbox.disabled = true;
       await disableLan(service.name);
     });
-    toggle.append(checkbox, el("span", { text: "lan" }));
+    toggle.append(checkbox, el("span", { text: t("common.lan") }));
     actions.append(toggle);
   }
 
@@ -404,17 +583,17 @@ function serviceActions(service) {
 function renderOverviewServices(services) {
   const body = $("#overview-services");
   body.replaceChildren();
-  $("#services-summary").textContent = `${services.length} configuré(s)`;
+  $("#services-summary").textContent = t("overview.configured", { count: services.length });
 
   if (services.length === 0) {
-    body.append(el("tr", {}, el("td", { className: "empty", colspan: "5", text: "aucun service configuré" })));
+    body.append(el("tr", {}, el("td", { className: "empty", colspan: "5", text: t("services.empty") })));
     return;
   }
 
   for (const service of services) {
     body.append(
       el("tr", {},
-        el("td", { className: "name", text: service.name }),
+        serviceNameCell(service),
         el("td", { className: "mono muted", text: service.port }),
         el("td", {}, statusPill(service.lan)),
         el("td", {}, serviceUrlLink(service, "local")),
@@ -429,14 +608,14 @@ function renderServices(services) {
   body.replaceChildren();
 
   if (services.length === 0) {
-    body.append(el("tr", {}, el("td", { className: "empty", colspan: "6", text: "aucun service configuré" })));
+    body.append(el("tr", {}, el("td", { className: "empty", colspan: "6", text: t("services.empty") })));
     return;
   }
 
   for (const service of services) {
     body.append(
       el("tr", {},
-        el("td", { className: "name", text: service.name }),
+        serviceNameCell(service),
         el("td", { className: "mono", text: service.port }),
         el("td", {}, statusPill(service.lan)),
         el("td", {}, serviceUrlLink(service, "local")),
@@ -452,13 +631,13 @@ function renderServices(services) {
 async function openService(name, target) {
   const service = (state.services || []).find((item) => item.name === name);
   if (!service) {
-    toast("service introuvable", true);
+    toast(t("services.notFound"), true);
     return;
   }
 
   const plainUrl = target === "lan" ? service.url_lan : service.url_local;
   if (!plainUrl) {
-    toast("ce service n'est pas exposé sur le LAN", true);
+    toast(t("services.notExposedLan"), true);
     return;
   }
 
@@ -471,34 +650,34 @@ async function openService(name, target) {
     const details = await api(`service-url?name=${encodeURIComponent(name)}`);
     const url = target === "lan" ? details.url_lan : details.url_local;
     if (!url) {
-      toast("URL indisponible pour ce service", true);
+      toast(t("services.urlUnavailable"), true);
       return;
     }
 
     const body = el("div");
     if (details.password) {
       body.append(
-        el("p", { className: "hint", text: "opencode génère un mot de passe à chaque démarrage." }),
-        el("p", { className: "mono", text: `mot de passe : ${details.password}` }),
+        el("p", { className: "hint", text: t("opencode.passwordHint") }),
+        el("p", { className: "mono", text: t("opencode.password", { password: details.password }) }),
       );
     } else {
-      body.append(el("p", { className: "hint", text: "L'URL contient un jeton d'authentification généré par le service." }));
+      body.append(el("p", { className: "hint", text: t("opencode.tokenHint") }));
     }
     body.append(el("p", { className: "mono url", text: url }));
 
     openDialog({
-      title: `ouvrir ${name}`,
+      title: t("open.title", { name }),
       body,
       actions: [
         {
-          label: "copier l'url",
+          label: t("open.copyUrl"),
           onClick: async () => {
             await navigator.clipboard.writeText(url);
-            toast("URL copiée");
+            toast(t("open.urlCopied"));
           },
         },
         {
-          label: "ouvrir",
+          label: t("common.open"),
           className: "btn-primary",
           onClick: () => {
             window.open(url, "_blank", "noopener");
@@ -533,15 +712,15 @@ function openServiceDialog(service = null) {
     className: "input mono",
     id: "service-port",
     value: service?.port || "",
-    placeholder: "4096 ou 8080:9000",
+    placeholder: t("services.portPlaceholder"),
     autocomplete: "off",
     spellcheck: "false",
   });
 
   const lanSelect = el("select", { className: "input mono", id: "service-lan" },
-    el("option", { value: "local", text: "localhost" }),
-    el("option", { value: "permanent", text: "LAN permanent" }),
-    el("option", { value: "temporary", text: "LAN temporaire" }),
+    el("option", { value: "local", text: t("common.localhost") }),
+    el("option", { value: "permanent", text: t("lan.permanent") }),
+    el("option", { value: "temporary", text: t("lan.temporary") }),
   );
   lanSelect.value = service?.lan || "local";
 
@@ -553,23 +732,23 @@ function openServiceDialog(service = null) {
     autocomplete: "off",
     spellcheck: "false",
   });
-  const timeoutField = field("durée (30m, 2h)", timeoutInput);
+  const timeoutField = field(t("services.timeout"), timeoutInput);
   timeoutField.hidden = lanSelect.value !== "temporary";
   lanSelect.addEventListener("change", () => {
     timeoutField.hidden = lanSelect.value !== "temporary";
   });
 
   const form = el("div", { className: "form-grid" },
-    field("nom", nameInput),
-    field("port invité ou hôte:invité", portInput),
-    field("exposition", lanSelect),
+    field(t("common.name"), nameInput),
+    field(t("services.portLabel"), portInput),
+    field(t("services.exposure"), lanSelect),
     timeoutField,
   );
 
   const actions = [];
   if (editing) {
     actions.push({
-      label: "supprimer",
+      label: t("common.delete"),
       className: "btn-danger",
       onClick: async () => {
         closeDialog();
@@ -578,9 +757,9 @@ function openServiceDialog(service = null) {
     });
   }
   actions.push(
-    { label: "annuler", onClick: closeDialog },
+    { label: t("common.cancel"), onClick: closeDialog },
     {
-      label: editing ? "enregistrer" : "ajouter",
+      label: editing ? t("common.save") : t("common.add"),
       className: "btn-primary",
       onClick: async () => {
         const name = nameInput.value.trim();
@@ -589,11 +768,11 @@ function openServiceDialog(service = null) {
         const timeout = timeoutInput.value.trim() || "2h";
 
         if (!/^[A-Za-z0-9._-]+$/.test(name)) {
-          toast("nom invalide : lettres, chiffres, '.', '_' ou '-'", true);
+          toast(t("services.invalidName"), true);
           return;
         }
         if (!/^[0-9]+(:[0-9]+)?$/.test(port)) {
-          toast("port invalide : 4096 ou 8080:9000", true);
+          toast(t("services.invalidPort"), true);
           return;
         }
 
@@ -602,13 +781,13 @@ function openServiceDialog(service = null) {
             method: "POST",
             body: { name: service.name, new_name: name, port, lan, timeout },
           });
-          toast(`service ${name} mis à jour`);
+          toast(t("services.updated", { name }));
         } else {
           await api("services/add", {
             method: "POST",
             body: { name, port, lan, timeout },
           });
-          toast(`service ${name} ajouté`);
+          toast(t("services.added", { name }));
         }
 
         closeDialog();
@@ -618,7 +797,7 @@ function openServiceDialog(service = null) {
   );
 
   openDialog({
-    title: editing ? `éditer ${service.name}` : "ajouter un service",
+    title: editing ? t("services.editTitle", { name: service.name }) : t("services.addTitle"),
     body: form,
     actions,
   });
@@ -626,16 +805,16 @@ function openServiceDialog(service = null) {
 
 async function removeService(name) {
   const confirmed = await confirmDialog(
-    `supprimer ${name}`,
-    "Le service sera retiré de services.json et le tunnel sera rechargé. Cette action ne supprime pas le logiciel dans la VM.",
-    "supprimer",
+    t("services.deleteTitle", { name }),
+    t("services.deleteMessage"),
+    t("common.delete"),
     true,
   );
   if (!confirmed) return;
 
   try {
     await api("services/remove", { method: "POST", body: { name } });
-    toast(`service ${name} supprimé`);
+    toast(t("services.removed", { name }));
     await loadStatus({ quiet: true });
   } catch (error) {
     toast(error.message, true);
@@ -647,10 +826,10 @@ async function removeService(name) {
 async function vmAction(action) {
   const force = $("#vm-force").checked;
   if (action !== "start") {
-    const verb = action === "shutdown" ? "arrêter" : "redémarrer";
+    const verb = action === "shutdown" ? t("common.stop") : t("common.restart");
     const confirmed = await confirmDialog(
-      `${verb} la VM`,
-      force ? "Mode forcé : la VM sera arrêtée immédiatement." : "La VM sera arrêtée proprement.",
+      t("vm.confirmTitle", { action: verb }),
+      force ? t("vm.forceMessage") : t("vm.stopMessage"),
       verb,
       action === "shutdown",
     );
@@ -659,25 +838,31 @@ async function vmAction(action) {
 
   try {
     const data = await api("vm", { method: "POST", body: { action, force } });
-    startJob(data);
+    startJob(data, { title: vmJobTitle(action, force) });
   } catch (error) {
     toast(error.message, true);
   }
 }
 
+function vmJobTitle(action, force) {
+  if (action === "start") return t("job.vm.start");
+  if (action === "shutdown") return force ? t("job.vm.shutdownForce") : t("job.vm.shutdown");
+  return force ? t("job.vm.restartForce") : t("job.vm.restart");
+}
+
 async function tunnelAction(action) {
   if (action === "stop") {
     const confirmed = await confirmDialog(
-      "arrêter le tunnel",
-      "Les services ne seront plus accessibles depuis l'hôte, mais la VM continuera de tourner.",
-      "arrêter",
+      t("tunnel.confirmTitle"),
+      t("tunnel.confirmMessage"),
+      t("common.stop"),
       true,
     );
     if (!confirmed) return;
   }
   try {
     const data = await api("tunnel", { method: "POST", body: { action } });
-    startJob(data);
+    startJob(data, { title: t(`job.tunnel.${action}`) });
   } catch (error) {
     toast(error.message, true);
   }
@@ -716,19 +901,19 @@ function renderUpdates(data) {
   syncUpdateControls();
 
   if (!repo.is_git) {
-    $("#update-repo").textContent = "non git";
-    $("#update-repo-detail").textContent = "dépôt local";
+    $("#update-repo").textContent = t("updates.notGit");
+    $("#update-repo-detail").textContent = t("updates.localRepo");
   } else if (repo.behind > 0) {
-    $("#update-repo").textContent = `${repo.behind} commit(s)`;
-    $("#update-repo-detail").textContent = repo.upstream || "en retard";
+    $("#update-repo").textContent = t("updates.commits", { count: repo.behind });
+    $("#update-repo-detail").textContent = repo.upstream || t("updates.behind");
   } else {
-    $("#update-repo").textContent = "à jour";
+    $("#update-repo").textContent = t("updates.upToDate");
     $("#update-repo-detail").textContent = repo.upstream || "—";
   }
 
   if (!vm.running) {
-    $("#update-apt").textContent = "VM arrêtée";
-    $("#update-reboot").textContent = "pas de données";
+    $("#update-apt").textContent = t("updates.vmStopped");
+    $("#update-reboot").textContent = t("updates.noData");
     $("#update-npm").textContent = "—";
     $("#update-vscode").textContent = "—";
     return;
@@ -736,22 +921,24 @@ function renderUpdates(data) {
 
   if (!updates) {
     $("#update-apt").textContent = "—";
-    $("#update-reboot").textContent = "aucun cache";
+    $("#update-reboot").textContent = t("updates.noCache");
     $("#update-npm").textContent = "—";
     $("#update-vscode").textContent = "—";
     return;
   }
 
   $("#update-apt").textContent = String(updates.apt ?? 0);
-  $("#update-reboot").textContent = updates.reboot ? "reboot requis" : `vérifié ${formatEpoch(updates.timestamp)}`;
-  $("#update-npm").textContent = updates.npm || "à jour";
-  $("#update-vscode").textContent = updates.vscode ? "vscode-server : mise à jour" : "vscode-server : à jour";
+  $("#update-reboot").textContent = updates.reboot
+    ? t("updates.rebootRequired")
+    : t("updates.checked", { date: formatEpoch(updates.timestamp) });
+  $("#update-npm").textContent = updates.npm || t("updates.upToDate");
+  $("#update-vscode").textContent = updates.vscode ? t("updates.vscodeUpdate") : t("updates.vscodeOk");
 }
 
 async function checkUpdates() {
   try {
     const data = await api("updates/check", { method: "POST" });
-    startJob(data, { reload: "updates" });
+    startJob(data, { reload: "updates", title: t("job.updates.check") });
   } catch (error) {
     toast(error.message, true);
   }
@@ -760,16 +947,16 @@ async function checkUpdates() {
 async function applySelectedUpdates() {
   const targets = $$("[data-update-target]:checked").map((checkbox) => checkbox.dataset.updateTarget);
   if (targets.length === 0) {
-    toast("sélectionne au moins une cible", true);
+    toast(t("updates.selectTarget"), true);
     return;
   }
 
   let sudoPassword = null;
   if (targets.includes("os")) {
     sudoPassword = await promptSudoPassword({
-      title: "mise à jour de l'os",
-      message: "La mise à jour OS nécessite le mot de passe sudo de la VM. Il est transmis directement, jamais écrit sur disque ni journalisé.",
-      confirmLabel: "mettre à jour",
+      title: t("updates.osTitle"),
+      message: t("updates.osSudoMessage"),
+      confirmLabel: t("updates.update"),
     });
     if (sudoPassword === null) return;
   }
@@ -778,7 +965,7 @@ async function applySelectedUpdates() {
     const body = { targets };
     if (sudoPassword !== null) body.sudo_password = sudoPassword;
     const data = await api("updates/apply", { method: "POST", body });
-    startJob(data, { reload: "updates" });
+    startJob(data, { reload: "updates", title: t("job.updates.apply", { targets: targets.join(", ") }) });
   } catch (error) {
     toast(error.message, true);
   }
@@ -786,15 +973,15 @@ async function applySelectedUpdates() {
 
 async function selfUpdate() {
   const confirmed = await confirmDialog(
-    "mettre à jour aibox",
-    "Le dépôt sera mis à jour et les scripts seront renvoyés dans la VM si nécessaire.",
-    "mettre à jour",
+    t("updates.selfUpdate"),
+    t("updates.selfUpdateMessage"),
+    t("updates.update"),
     false,
   );
   if (!confirmed) return;
   try {
     const data = await api("self-update", { method: "POST" });
-    startJob(data, { reload: "updates" });
+    startJob(data, { reload: "updates", title: t("job.selfUpdate") });
   } catch (error) {
     toast(error.message, true);
   }
@@ -817,7 +1004,7 @@ function renderSetup(data) {
   const steps = data.steps || [];
 
   if (steps.length === 0) {
-    body.append(el("tr", {}, el("td", { className: "empty", colspan: "4", text: "aucune étape" })));
+    body.append(el("tr", {}, el("td", { className: "empty", colspan: "4", text: t("setup.noSteps") })));
     return;
   }
 
@@ -828,21 +1015,22 @@ function renderSetup(data) {
       unknown: "warn",
       disabled: "",
     }[step.status] || "";
-    const status = el("span", { className: `pill ${tone}`, text: step.status });
+    const status = el("span", { className: `pill ${tone}`, text: stateLabel("setup", step.status) });
+    const reason = setupStepReason(step);
 
     let action;
     if (step.web_runnable) {
-      const run = el("button", { className: "btn btn-sm", type: "button", text: "lancer" });
+      const run = el("button", { className: "btn btn-sm", type: "button", text: t("common.run") });
       run.disabled = !data.vm.running && step.name !== "tunnel" && step.name !== "cli";
       run.addEventListener("click", () => runSetup(step.name));
       action = run;
     } else {
-      action = el("span", { className: "mono dim", text: "cli", title: step.reason || "" });
+      action = el("span", { className: "mono dim", text: "cli", title: reason });
     }
 
     const description = el("div", {},
-      el("div", { text: step.description }),
-      step.reason ? el("div", { className: "mono dim", text: step.reason }) : null,
+      el("div", { text: setupStepDescription(step) }),
+      reason ? el("div", { className: "mono dim", text: reason }) : null,
     );
 
     body.append(
@@ -864,9 +1052,9 @@ async function runSetup(step) {
 
   if (needsSudo) {
     sudoPassword = await promptSudoPassword({
-      title: `installation : ${step}`,
-      message: "Cette étape nécessite les droits root dans la VM. Le mot de passe est transmis directement, jamais écrit sur disque ni journalisé.",
-      confirmLabel: "lancer",
+      title: t("setup.sudoTitle", { step }),
+      message: t("setup.sudoMessage"),
+      confirmLabel: t("common.run"),
     });
     if (sudoPassword === null) return;
   }
@@ -875,7 +1063,7 @@ async function runSetup(step) {
     const body = { step, with_deps: withDeps };
     if (sudoPassword !== null) body.sudo_password = sudoPassword;
     const data = await api("setup/run", { method: "POST", body });
-    startJob(data, { reload: "setup" });
+    startJob(data, { reload: "setup", title: t("job.setup", { step }) });
   } catch (error) {
     toast(error.message, true);
   }
@@ -886,11 +1074,10 @@ async function runSetup(step) {
 function renderSettings(config) {
   const effective = config.lan_hostname || "";
   const configured = config.lan_hostname_configured || "";
-  $("#lan-auto").textContent = effective || "—";
   $("#lan-hostname").placeholder = effective || "desk.local";
   $("#settings-current").textContent = configured
-    ? `valeur configurée : ${configured}`
-    : `automatique : ${effective || "—"}`;
+    ? t("settings.configuredValue", { value: configured })
+    : t("settings.automaticValue", { value: effective || "—" });
   if (document.activeElement !== $("#lan-hostname")) {
     $("#lan-hostname").value = configured;
   }
@@ -899,7 +1086,7 @@ function renderSettings(config) {
 async function saveLanHostname(value) {
   try {
     await api("config", { method: "POST", body: { lan_hostname: value } });
-    toast(value ? "nom d'hôte LAN enregistré" : "nom d'hôte LAN remis en automatique");
+    toast(value ? t("settings.saved") : t("settings.reset"));
     await loadStatus({ quiet: true });
   } catch (error) {
     toast(error.message, true);
@@ -908,9 +1095,9 @@ async function saveLanHostname(value) {
 
 async function quitWeb() {
   const confirmed = await confirmDialog(
-    "quitter l'interface",
-    "Le service aibox web va s'arrêter. Aucun processus ne restera en arrière-plan. Tu pourras le relancer avec `aibox web`.",
-    "quitter",
+    t("quit.title"),
+    t("quit.message"),
+    t("quit.action"),
     true,
   );
   if (!confirmed) return;
@@ -919,12 +1106,12 @@ async function quitWeb() {
     await api("quit", { method: "POST", body: { session_id: state.sessionId } });
     state.quitting = true;
     if (state.jobTimer) clearTimeout(state.jobTimer);
-    $("#footer-status").textContent = "service arrêté";
+    setFooterStatus("status.stopped");
     document.body.classList.add("stopped");
     openDialog({
-      title: "service arrêté",
-      body: "Le serveur aibox web est arrêté. L'onglet va se fermer ; sinon, tu peux le fermer manuellement.",
-      actions: [{ label: "fermer", onClick: closeDialog }],
+      title: t("quit.stoppedTitle"),
+      body: t("quit.stoppedMessage"),
+      actions: [{ label: t("common.close"), onClick: closeDialog }],
     });
     setTimeout(() => {
       try {
@@ -942,22 +1129,22 @@ async function quitWeb() {
 
 function jobStateLabel(stateName) {
   return {
-    running: "en cours",
-    done: "terminé",
-    failed: "échec",
-    cancelled: "annulé",
+    running: t("job.running"),
+    done: t("job.done"),
+    failed: t("job.failed"),
+    cancelled: t("job.cancelled"),
   }[stateName] || stateName;
 }
 
 function startJob(response, options = {}) {
   if (!response || !response.id) {
-    toast("opération non démarrée", true);
+    toast(t("job.notStarted"), true);
     return;
   }
 
   state.activeJob = {
     id: response.id,
-    title: response.title || "opération",
+    title: options.title || response.title || t("job.operation"),
     reload: options.reload || "all",
     done: false,
   };
@@ -966,7 +1153,7 @@ function startJob(response, options = {}) {
 
   $("#active-job-panel").hidden = false;
   $("#active-job-title").textContent = state.activeJob.title;
-  $("#active-job-state").textContent = "en cours…";
+  $("#active-job-state").textContent = t("job.inProgressShort");
   $("#active-job-bar").style.display = "block";
 
   openJobDialog(state.activeJob);
@@ -980,18 +1167,20 @@ async function pollJob() {
     const data = await api(`job?id=${encodeURIComponent(state.activeJob.id)}`);
     const logText = stripAnsi((data.log || []).join("\n"));
     if (state.jobLogEl) {
-      state.jobLogEl.textContent = logText || "en attente de sortie…";
+      state.jobLogEl.textContent = logText || t("job.waitingOutput");
       state.jobLogEl.scrollTop = state.jobLogEl.scrollHeight;
     }
 
-    const progressLabel = `${jobStateLabel(data.state)}${data.exit !== null ? ` (code ${data.exit})` : ""}`;
+    const progressLabel = data.exit !== null
+      ? t("job.exitCode", { state: jobStateLabel(data.state), code: data.exit })
+      : jobStateLabel(data.state);
     $("#active-job-state").textContent = progressLabel;
     if (state.jobDialogStatusEl) {
       state.jobDialogStatusEl.textContent = progressLabel;
       state.jobDialogStatusEl.className = `job-dialog-status ${data.state}`;
     }
     if (data.state !== "running") {
-      if (state.jobDialogCloseBtn) state.jobDialogCloseBtn.textContent = "fermer";
+      if (state.jobDialogCloseBtn) state.jobDialogCloseBtn.textContent = t("common.close");
       if (state.jobDialogKillBtn) state.jobDialogKillBtn.disabled = true;
     }
 
@@ -1005,9 +1194,12 @@ async function pollJob() {
     $("#active-job-panel").hidden = true;
 
     if (data.state === "done" && data.exit === 0) {
-      toast(`${state.activeJob.title} terminé`);
+      toast(t("job.doneToast", { title: state.activeJob.title }));
     } else if (data.state !== "cancelled") {
-      toast(`${state.activeJob.title} en échec${data.exit !== null ? ` (code ${data.exit})` : ""}`, true);
+      toast(t("job.failedToast", {
+        title: state.activeJob.title,
+        code: data.exit !== null ? ` (code ${data.exit})` : "",
+      }), true);
     }
 
     const reload = state.activeJob.reload;
@@ -1031,24 +1223,24 @@ async function pollJob() {
 async function cancelActiveJob() {
   if (!state.activeJob) return;
   const confirmed = await confirmDialog(
-    "arrêter l'opération",
-    "Le processus en cours va être interrompu. Certaines opérations peuvent laisser la VM ou un service dans un état intermédiaire.",
-    "kill",
+    t("job.cancelTitle"),
+    t("job.cancelMessage"),
+    t("job.kill"),
     true,
   );
   if (!confirmed) return;
 
   try {
     await api("job/cancel", { method: "POST", body: { id: state.activeJob.id } });
-    toast("opération interrompue");
+    toast(t("job.cancelledToast"));
   } catch (error) {
     toast(error.message, true);
   }
 }
 
 function openJobDialog(job) {
-  const status = el("div", { className: "job-dialog-status running", text: "en cours…" });
-  const pre = el("pre", { text: "en attente de sortie…" });
+  const status = el("div", { className: "job-dialog-status running", text: t("job.inProgressShort") });
+  const pre = el("pre", { text: t("job.waitingOutput") });
   state.jobLogEl = pre;
   state.jobDialogStatusEl = status;
 
@@ -1057,12 +1249,12 @@ function openJobDialog(job) {
     body: el("div", {}, status, pre),
     actions: [
       {
-        label: "kill",
+        label: t("job.kill"),
         className: "btn-danger",
         onClick: cancelActiveJob,
       },
       {
-        label: "masquer",
+        label: t("common.hide"),
         onClick: closeDialog,
       },
     ],
@@ -1073,6 +1265,16 @@ function openJobDialog(job) {
 }
 
 /* Tabs -------------------------------------------------------------------- */
+
+/* Re-render every dynamic part after a language switch. */
+function rerenderAll() {
+  if (state.status) renderStatus(state.status);
+  if (state.updates) renderUpdates(state.updates);
+  if (state.setup) renderSetup(state.setup);
+  if (state.activeJob) {
+    $("#active-job-title").textContent = state.activeJob.title;
+  }
+}
 
 function currentTabFromLocation() {
   const name = new URLSearchParams(window.location.search).get("tab");
@@ -1141,6 +1343,18 @@ function initEvents() {
     saveLanHostname("");
   });
 
+  const languageSelect = $("#language-select");
+  languageSelect.value = currentLang();
+  languageSelect.addEventListener("change", () => {
+    window.i18n.setLang(languageSelect.value);
+  });
+
+  document.addEventListener("i18n:change", (event) => {
+    languageSelect.value = event.detail.lang;
+    $("#footer-status").textContent = t(state.footerStatusKey);
+    rerenderAll();
+  });
+
   $("#active-job-log").addEventListener("click", () => {
     if (state.activeJob) openJobDialog(state.activeJob);
   });
@@ -1177,12 +1391,16 @@ async function init() {
   initToken();
   initEvents();
 
+  // The footer status is updated at runtime: it is not translated statically
+  // so that a language switch does not overwrite the live value.
+  setFooterStatus("status.connecting");
+
   if (!state.token) {
-    $("#footer-status").textContent = "token absent";
+    setFooterStatus("status.noToken");
     openDialog({
-      title: "token absent",
-      body: "Relance `aibox web` : l'interface ouvre automatiquement le lien avec le token.",
-      actions: [{ label: "fermer", onClick: closeDialog }],
+      title: t("status.noToken"),
+      body: t("status.noTokenMessage"),
+      actions: [{ label: t("common.close"), onClick: closeDialog }],
     });
     return;
   }
