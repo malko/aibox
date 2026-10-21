@@ -22,9 +22,17 @@ This repository contains bash scripts for managing an AI development VM with KVM
   - `guest/configure-motd.sh` - Login banner; the dot colour follows the
     guest port state (green/red/dim)
   - `cmd/` - Service and VM management commands
+  - `cmd/vm-snapshot` - Snapshot list/create/delete/revert; `list --json` feeds
+    the web console
   - `web/` - Local web console (BusyBox httpd, CGI bash, vanilla HTML/CSS/JS)
     - `web/public/i18n.js` - Translation catalogs (`en` default, `fr`); static
       text uses `data-i18n` attributes, dynamic text uses `t("key", params)`
+    - `web/public/cgi-bin/api.sh` - API routes; `GET snapshots`, `POST
+      snapshots/create|revert|delete` and `POST terminal` back the new console
+      sections
+    - `web/lib/open-terminal.sh` - Opens a host terminal running `aibox -n`
+      (plain SSH, no port forwarding, no tunnel service) for the `POST
+      terminal` route; `AIBOX_TERMINAL` forces one emulator
 
 ## Commands
 
@@ -60,6 +68,13 @@ This repository contains bash scripts for managing an AI development VM with KVM
 ./aibox service-add opencode 4096
 ./aibox service-list
 ./aibox service-remove opencode
+
+# Snapshots
+./aibox snapshot list            # List the VM snapshots
+./aibox snapshot list --json     # Same, machine-readable
+./aibox snapshot create          # Create one (auto name, shuts the VM down)
+./aibox snapshot revert my-snap  # Revert to a snapshot
+./aibox snapshot delete my-snap  # Delete a snapshot
 
 # Updates
 ./aibox update all

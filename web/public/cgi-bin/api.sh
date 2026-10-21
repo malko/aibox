@@ -60,6 +60,76 @@ case "$METHOD $ROUTE" in
         cgi_aibox_json setup --status --json || exit 0
         ;;
 
+    "GET snapshots")
+        cgi_aibox_json snapshot list --json || exit 0
+        ;;
+
+    "POST snapshots/create")
+        cgi_json_body || exit 0
+        NAME=$(printf '%s' "$CGI_BODY" | jq -r '.name // empty')
+        SHUTDOWN=$(printf '%s' "$CGI_BODY" | jq -r '.shutdown // false')
+        RESTART=$(printf '%s' "$CGI_BODY" | jq -r '.restart // false')
+
+        if [[ -n "$NAME" ]] && ! [[ "$NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            json_error "400 Bad Request" "invalid snapshot name"
+            exit 0
+        fi
+
+        if [[ "$SHUTDOWN" != "true" ]]; then
+            STATE=$("$AIBOX_BIN" status --json 2>/dev/null | jq -r '.vm.running // false')
+            if [[ "$STATE" == "true" ]]; then
+                json_error "400 Bad Request" "the VM must be shut down to create a snapshot"
+                exit 0
+            fi
+        fi
+
+        args=(snapshot create)
+        [[ -n "$NAME" ]] && args+=("$NAME")
+        args+=(--yes)
+        [[ "$RESTART" == "true" ]] && args+=(--start)
+        job_start "Snapshot: create" "${args[@]}" || exit 0
+        ;;
+
+    "POST snapshots/revert")
+        cgi_json_body || exit 0
+        NAME=$(printf '%s' "$CGI_BODY" | jq -r '.name // empty')
+        RESTART=$(printf '%s' "$CGI_BODY" | jq -r '.restart // false')
+
+        if [[ -z "$NAME" ]] || ! [[ "$NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            json_error "400 Bad Request" "invalid snapshot name"
+            exit 0
+        fi
+
+        args=(snapshot revert "$NAME" --yes)
+        [[ "$RESTART" == "true" ]] && args+=(--start)
+        job_start "Snapshot: revert" "${args[@]}" || exit 0
+        ;;
+
+    "POST snapshots/delete")
+        cgi_json_body || exit 0
+        NAME=$(printf '%s' "$CGI_BODY" | jq -r '.name // empty')
+
+        if [[ -z "$NAME" ]] || ! [[ "$NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            json_error "400 Bad Request" "invalid snapshot name"
+            exit 0
+        fi
+
+        job_start "Snapshot: delete" snapshot delete "$NAME" || exit 0
+        ;;
+
+    "POST terminal")
+        cgi_json_body || exit 0
+        error_file=$(mktemp)
+        if ! output=$(AIBOX_ROOT="$AIBOX_ROOT" "$AIBOX_ROOT/web/lib/open-terminal.sh" 2>"$error_file"); then
+            error=$(cat "$error_file")
+            rm -f "$error_file"
+            json_error "500 Internal Server Error" "${error:-could not open the terminal}"
+            exit 0
+        fi
+        rm -f "$error_file"
+        json_response "$(jq -n --arg output "$output" '{ok:true,output:$output}')"
+        ;;
+
     "GET service-url")
         NAME=$(query_get name || true)
         if [[ -z "$NAME" ]] || ! validate_service_name "$NAME"; then

@@ -504,6 +504,9 @@ h2 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--dim);
+  display: flex;
+  align-items: center;
+  gap: .8em;
 }
 .dialog .field .input, .dialog .field select { min-width: 0; width: 100%; }
 .job-dialog-status {

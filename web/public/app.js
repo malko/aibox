@@ -2,11 +2,15 @@
 
 const TOKEN_KEY = "aiboxWebToken";
 
+/* Console sections, in display order. The number keys 1-6 select them. */
+const TABS = ["overview", "services", "updates", "setup", "snapshots", "settings"];
+
 const state = {
   token: "",
   status: null,
   updates: null,
   setup: null,
+  snapshots: null,
   activeJob: null,
   jobTimer: null,
   jobLogEl: null,
@@ -119,6 +123,7 @@ const API_ERROR_KEYS = {
   "invalid LAN hostname": "error.api.lanHostname",
   "invalid LAN mode": "error.api.lanMode",
   "invalid new service name": "error.api.newServiceName",
+  "invalid snapshot name": "error.api.invalidSnapshotName",
   "invalid Origin header": "error.api.origin",
   "invalid or missing token": "error.api.token",
   "invalid port": "error.api.port",
@@ -130,6 +135,8 @@ const API_ERROR_KEYS = {
   "invalid tunnel action": "error.api.tunnelAction",
   "invalid update target": "error.api.updateTarget",
   "invalid VM action": "error.api.vmAction",
+  "the VM does not exist": "error.api.vmMissing",
+  "no terminal emulator found": "error.api.noTerminal",
   "invalid web PID": "error.api.webPid",
   "job not found": "error.api.jobNotFound",
   "no update target selected": "error.api.noTarget",
@@ -139,6 +146,7 @@ const API_ERROR_KEYS = {
   "sudo password is required for this setup step": "error.api.sudoSetup",
   "targets must be an array": "error.api.targetsArray",
   "the VM must be running for this setup step": "error.api.vmRequired",
+  "the VM must be shut down to create a snapshot": "error.api.snapshotNeedsShutdown",
   "this setup step is not available from the web UI": "error.api.stepUnavailable",
   "unknown route": "error.api.unknownRoute",
   "web PID file not found": "error.api.webPidMissing",
@@ -1210,6 +1218,7 @@ async function pollJob() {
     await loadStatus({ quiet: true });
     if (reload === "updates" || reload === "all") await loadUpdates({ quiet: true });
     if (reload === "setup" || reload === "all") await loadSetup({ quiet: true });
+    if (reload === "snapshots" || reload === "all") await loadSnapshots({ quiet: true });
   } catch (error) {
     state.activeJob.done = true;
     state.busy = false;
@@ -1264,6 +1273,173 @@ function openJobDialog(job) {
   state.jobDialogCloseBtn = $("#dialog-actions button:last-child");
 }
 
+/* Snapshots -------------------------------------------------------------- */
+
+async function loadSnapshots({ quiet = false } = {}) {
+  try {
+    state.snapshots = await api("snapshots");
+    renderSnapshots(state.snapshots);
+  } catch (error) {
+    if (!quiet) toast(error.message, true);
+  }
+}
+
+function renderSnapshots(snapshots) {
+  const body = $("#snapshots-body");
+  body.replaceChildren();
+  const list = Array.isArray(snapshots) ? snapshots : (snapshots?.snapshots || []);
+
+  if (list.length === 0) {
+    body.append(el("tr", {}, el("td", { className: "empty", colspan: "4", text: t("snapshots.empty") })));
+    return;
+  }
+
+  for (const snapshot of list) {
+    const created = snapshot.created
+      ? new Date(Number(snapshot.created) * 1000).toLocaleString(currentLang())
+      : "—";
+
+    const actions = el("div", { className: "row-actions" });
+
+    const revert = el("button", { className: "btn btn-sm", type: "button", text: t("snapshots.revert") });
+    revert.addEventListener("click", () => revertSnapshot(snapshot.name));
+    actions.append(revert);
+
+    const remove = el("button", { className: "btn btn-sm btn-danger", type: "button", text: t("common.delete") });
+    remove.addEventListener("click", () => deleteSnapshot(snapshot.name));
+    actions.append(remove);
+
+    body.append(
+      el("tr", {},
+        el("td", { className: "name", text: snapshot.name }),
+        el("td", {}, el("span", { className: "pill", text: stateLabel("vm", snapshot.state) })),
+        el("td", { className: "mono muted", text: created }),
+        el("td", { className: "actions-cell" }, actions),
+      ),
+    );
+  }
+}
+
+function openSnapshotDialog() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+
+  const nameInput = el("input", {
+    className: "input mono",
+    id: "snapshot-name",
+    value: `aibox-${stamp}`,
+    placeholder: "aibox-20240101-120000",
+    autocomplete: "off",
+    spellcheck: "false",
+  });
+
+  const vmRunning = Boolean(state.status?.vm?.running);
+  const shutdownInput = el("input", { type: "checkbox", checked: vmRunning, id: "snapshot-shutdown" });
+  const shutdownField = el("div", { className: "field check-field" },
+    el("label", { for: "snapshot-shutdown", text: t("snapshots.shutdown") }, shutdownInput)
+  );
+
+  const restartInput = el("input", { type: "checkbox", checked: vmRunning, id: "snapshot-restart" });
+  const restartField = el("div", { className: "field check-field" },
+    el("label", { for: "snapshot-restart", text: t("snapshots.restart") }, restartInput)
+  );
+
+  const form = el("div", { className: "form-grid" },
+    field(t("snapshots.name"), nameInput),
+    shutdownField,
+    restartField,
+  );
+
+  openDialog({
+    title: t("snapshots.create"),
+    body: form,
+    actions: [
+      { label: t("common.cancel"), onClick: closeDialog },
+      {
+        label: t("snapshots.create"),
+        className: "btn-primary",
+        onClick: async () => {
+          const name = nameInput.value.trim();
+          if (!name) {
+            toast(t("snapshots.nameRequired"), true);
+            return;
+          }
+          if (!/^[A-Za-z0-9._-]+$/.test(name)) {
+            toast(t("snapshots.invalidName"), true);
+            return;
+          }
+          try {
+            const data = await api("snapshots/create", {
+              method: "POST",
+              body: { name, shutdown: shutdownInput.checked, restart: restartInput.checked },
+            });
+            closeDialog();
+            startJob(data, { reload: "snapshots", title: t("snapshots.jobCreate") });
+          } catch (error) {
+            toast(error.message, true);
+          }
+        },
+      },
+    ],
+  });
+}
+
+async function revertSnapshot(name) {
+  const confirmed = await confirmDialog(
+    t("snapshots.revertTitle", { name }),
+    t("snapshots.revertMessage"),
+    t("snapshots.revert"),
+    true,
+  );
+  if (!confirmed) return;
+
+  try {
+    const data = await api("snapshots/revert", {
+      method: "POST",
+      body: { name, restart: true },
+    });
+    startJob(data, { reload: "snapshots", title: t("snapshots.jobRevert", { name }) });
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function deleteSnapshot(name) {
+  const confirmed = await confirmDialog(
+    t("snapshots.deleteTitle", { name }),
+    t("snapshots.deleteMessage"),
+    t("common.delete"),
+    true,
+  );
+  if (!confirmed) return;
+
+  try {
+    const data = await api("snapshots/delete", {
+      method: "POST",
+      body: { name },
+    });
+    startJob(data, { reload: "snapshots", title: t("snapshots.jobDelete", { name }) });
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+/* Terminal ---------------------------------------------------------------- */
+
+async function openTerminal() {
+  const button = $("#open-terminal");
+  button.disabled = true;
+  try {
+    const data = await api("terminal", { method: "POST", body: {} });
+    toast(data.output?.trim() || t("terminal.opened"));
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 /* Tabs -------------------------------------------------------------------- */
 
 /* Re-render every dynamic part after a language switch. */
@@ -1271,6 +1447,7 @@ function rerenderAll() {
   if (state.status) renderStatus(state.status);
   if (state.updates) renderUpdates(state.updates);
   if (state.setup) renderSetup(state.setup);
+  if (state.snapshots) renderSnapshots(state.snapshots);
   if (state.activeJob) {
     $("#active-job-title").textContent = state.activeJob.title;
   }
@@ -1278,7 +1455,7 @@ function rerenderAll() {
 
 function currentTabFromLocation() {
   const name = new URLSearchParams(window.location.search).get("tab");
-  return ["overview", "services", "updates", "setup", "settings"].includes(name) ? name : "overview";
+  return TABS.includes(name) ? name : "overview";
 }
 
 function switchTab(name, updateUrl = true) {
@@ -1292,6 +1469,7 @@ function switchTab(name, updateUrl = true) {
 
   if (name === "updates" && !state.updates) loadUpdates();
   if (name === "setup" && !state.setup) loadSetup();
+  if (name === "snapshots" && !state.snapshots) loadSnapshots();
 }
 
 function initEvents() {
@@ -1303,6 +1481,9 @@ function initEvents() {
   $("#refresh-services").addEventListener("click", () => loadStatus());
   $("#refresh-updates").addEventListener("click", () => loadUpdates());
   $("#refresh-setup").addEventListener("click", () => loadSetup());
+  $("#refresh-snapshots").addEventListener("click", () => loadSnapshots());
+  $("#create-snapshot").addEventListener("click", () => openSnapshotDialog());
+  $("#open-terminal").addEventListener("click", () => openTerminal());
   $("#refresh-settings").addEventListener("click", () => loadStatus());
   $("#add-service").addEventListener("click", () => openServiceDialog());
   $("#check-updates").addEventListener("click", checkUpdates);
@@ -1382,8 +1563,9 @@ function initEvents() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && $("#dialog").open) closeDialog();
     if (event.target instanceof Element && event.target.matches("input, select, textarea")) return;
-    const tabs = ["overview", "services", "updates", "setup", "settings"];
-    if (event.key >= "1" && event.key <= "5") switchTab(tabs[Number(event.key) - 1]);
+    if (event.key >= "1" && event.key <= String(TABS.length)) {
+      switchTab(TABS[Number(event.key) - 1]);
+    }
   });
 }
 

@@ -281,8 +281,10 @@ guest_probe_ports() {
     fi
 
     # The ports are passed as arguments: the heredoc stays unexpanded, so the
-    # guest shell is the only one interpreting the loop.
-    ssh -o BatchMode=yes -o ConnectTimeout=5 "$GUEST_USER@$ip" bash -s -- "${ports[@]}" <<'PROBE' 2>/dev/null
+    # guest shell is the only one interpreting the loop. The timeout is short:
+    # the web console polls the status regularly and the server is
+    # single-threaded, so a slow probe delays every other request.
+    ssh -o BatchMode=yes -o ConnectTimeout=3 "$GUEST_USER@$ip" bash -s -- "${ports[@]}" <<'PROBE' 2>/dev/null
 for p in "$@"; do
     if (exec 3<>/dev/tcp/127.0.0.1/"$p") 2>/dev/null; then
         echo "$p up"

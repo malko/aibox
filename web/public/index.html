@@ -30,6 +30,7 @@
     <button class="tab" data-tab="services" data-i18n="tab.services">services</button>
     <button class="tab" data-tab="updates" data-i18n="tab.updates">updates</button>
     <button class="tab" data-tab="setup" data-i18n="tab.setup">setup</button>
+    <button class="tab" data-tab="snapshots" data-i18n="tab.snapshots">snapshots</button>
     <button class="tab" data-tab="settings" data-i18n="tab.settings">settings</button>
   </nav>
 
@@ -55,7 +56,8 @@
             <button class="btn btn-primary" data-vm="start" data-i18n="common.start">start</button>
             <button class="btn" data-vm="restart" data-i18n="common.restart">restart</button>
             <button class="btn btn-danger" data-vm="shutdown" data-i18n="common.stop">stop</button>
-            <label class="check" data-i18n-title="vm.forceHint" title="Force the action: the VM is stopped or restarted immediately, without a clean shutdown."><input type="checkbox" id="vm-force"> <span data-i18n="common.force">force</span></label>
+            <button class="btn" id="open-terminal" data-i18n="terminal.button" data-i18n-title="terminal.hint">terminal</button>
+            <label class="check"><input type="checkbox" id="vm-force"> <span data-i18n="common.force">force</span></label>
           </div>
         </section>
 
@@ -185,6 +187,25 @@
         </table>
       </div>
       <label class="check"><input type="checkbox" id="setup-with-deps"> <span data-i18n="setup.withDeps">also run the prerequisites</span></label>
+    </section>
+
+    <section class="tab-panel" id="tab-snapshots">
+      <div class="section-head">
+        <h1 data-i18n="tab.snapshots">snapshots</h1>
+        <div class="actions">
+          <button class="btn btn-ghost" id="refresh-snapshots" data-i18n="common.refresh">refresh</button>
+          <button class="btn btn-primary" id="create-snapshot" data-i18n="snapshots.create">create</button>
+        </div>
+      </div>
+      <p class="hint" data-i18n="snapshots.hint">A snapshot keeps a copy of the VM disk. Creating one shuts the VM down first, and reverting to one replaces the current disk by the saved copy.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th data-i18n="common.name">Name</th><th data-i18n="snapshots.state">state</th><th data-i18n="snapshots.created">created</th><th class="actions-cell" data-i18n="common.actions">Actions</th></tr>
+          </thead>
+          <tbody id="snapshots-body"></tbody>
+        </table>
+      </div>
     </section>
 
     <section class="tab-panel" id="tab-settings">

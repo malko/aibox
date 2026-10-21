@@ -229,7 +229,10 @@ The console provides:
 - LAN hostname setting for service URLs;
 - interface language: English (default) or French;
 - a live availability indicator per service: a green dot when the port is
-  listening in the VM, a red dot when it is closed.
+  listening in the VM, a red dot when it is closed;
+- a snapshots section: list, create, revert and delete the VM snapshots;
+- a button opening a terminal window connected to the VM (it runs `aibox -n`:
+  a plain SSH session, without port forwarding).
 
 The interface language is selected in the **réglages / settings** section and
 is remembered in the browser (`localStorage`). The default is English.
@@ -237,7 +240,7 @@ is remembered in the browser (`localStorage`). The default is English.
 The access token is stored in `~/.config/aibox/web-token` (mode `600`) and is
 passed to the browser in the URL fragment. The API requires it as a bearer
 token, rejects non-local `Host`/`Origin` headers, and never listens on the LAN.
-Keys `1`–`5` switch between the console sections.
+Keys `1`–`6` switch between the console sections.
 
 ### Run a command in the VM
 
@@ -323,10 +326,28 @@ Notes:
 ./aibox snapshot create              # Create snapshot (auto name, internal qcow2)
 ./aibox snapshot create my-snap     # Create snapshot (custom name, internal qcow2)
 ./aibox snapshot list                # List snapshots
+./aibox snapshot list --json         # Same, machine-readable
 ./aibox snapshot delete my-snap     # Delete snapshot
 ./aibox snapshot revert my-snap     # Revert to snapshot
+./aibox snapshot revert my-snap --yes --start  # Revert, then start the VM again
 
 Note: Snapshots are internal (embedded in qcow2 file). VM must be shut off to create.
+`--yes` skips the confirmation and shuts the VM down first, `--start` restarts it
+after a create or a revert.
+
+The web console opens a terminal window running `aibox -n`: a plain SSH
+session, with no port forwarding and without touching the tunnel service. The
+emulator is picked automatically: the well known ones (`kitty`, `alacritty`,
+`wezterm`, `foot`, `gnome-terminal`, `konsole`, `xfce4-terminal`,
+`x-terminal-emulator`, `xterm`) first, then the default terminal of the desktop
+environment (`xdg-terminal-exec`, the freedesktop default terminal
+specification), then a generated desktop entry and finally Terminal.app on
+macOS. Set `AIBOX_TERMINAL` to force one:
+
+```bash
+AIBOX_TERMINAL=wezterm ./aibox web   # always use wezterm
+AIBOX_TERMINAL=xdg-terminal-exec ./aibox web
+```
 ```
 
 ### Updates
@@ -486,7 +507,7 @@ aibox/
 │   └── install-update-check.sh  # Install the update check timer
 ├── web/                         # Local web console
 │   ├── public/                  # HTML/CSS/JS and BusyBox CGI (i18n.js = translations)
-│   └── lib/                     # CGI helpers and job runner
+│   └── lib/                     # CGI helpers, job runner and open-terminal.sh
 ├── services-funcs.sh            # services.json + per-service LAN state
 └── shared-funcs.sh              # Common functions
 ```
