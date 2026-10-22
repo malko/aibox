@@ -708,7 +708,7 @@
         </details>
         <details>
           <summary data-i18n="faq.11.q">How do I reach a service from another device?</summary>
-          <div class="answer" data-i18n-html="faq.11.a">Expose that service on the LAN: <code>aibox tunnel lan on opencode --permanent</code>. The tunnel binds the port on your network interface instead of localhost, for that service only.</div>
+          <div class="answer" data-i18n-html="faq.11.a">Expose it on the LAN with <code>aibox tunnel lan on opencode</code>. The exposure is temporary by default: it reverts on its own after a couple of hours, and it is always lost on reboot. If a service really has to stay reachable, ask for it explicitly: AIBox then keeps the setting in the configuration and applies it again on the next start. The tunnel binds the port on your network interface instead of localhost, for that service only.</div>
         </details>
         <details>
           <summary data-i18n="faq.12.q">Do I need root on the host?</summary>

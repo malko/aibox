@@ -297,7 +297,7 @@
       "faq.10.q": "Can I run my own services?",
       "faq.10.a": "Yes. <code>aibox service-add mytool 8080</code> registers a port, and the tunnel, the console and the status output pick it up right away.",
       "faq.11.q": "How do I reach a service from another device?",
-      "faq.11.a": "Expose that service on the LAN: <code>aibox tunnel lan on opencode --permanent</code>. The tunnel binds the port on your network interface instead of localhost, for that service only.",
+      "faq.11.a": "Expose it on the LAN with <code>aibox tunnel lan on opencode</code>. The exposure is temporary by default: it reverts on its own after a couple of hours, and it is always lost on reboot. If a service really has to stay reachable, ask for it explicitly: AIBox then keeps the setting in the configuration and applies it again on the next start. The tunnel binds the port on your network interface instead of localhost, for that service only.",
       "faq.12.q": "Do I need root on the host?",
       "faq.12.a": "Only for a few setup steps, and the password is asked at that moment. It is never written to a file, never passed on a command line and never kept after the step ends.",
 
@@ -604,7 +604,7 @@
       "faq.10.q": "Puis-je faire tourner mes propres services ?",
       "faq.10.a": "Oui. <code>aibox service-add mytool 8080</code> enregistre un port, et le tunnel, la console et la sortie de statut le reprennent immédiatement.",
       "faq.11.q": "Comment accéder à un service depuis un autre appareil ?",
-      "faq.11.a": "Exposez ce service sur le réseau : <code>aibox tunnel lan on opencode --permanent</code>. Le tunnel écoute alors sur l'interface réseau au lieu de localhost, pour ce service uniquement.",
+      "faq.11.a": "Exposez-le sur le réseau avec <code>aibox tunnel lan on opencode</code>. L'exposition est temporaire par défaut : elle revient toute seule après quelques heures, et elle est toujours perdue au redémarrage. Si un service doit vraiment rester joignable, demandez-le explicitement : AIBox garde alors le réglage dans la configuration et le réapplique au prochain démarrage. Le tunnel écoute sur l'interface réseau au lieu de localhost, pour ce service uniquement.",
       "faq.12.q": "Faut-il être root sur l'hôte ?",
       "faq.12.a": "Seulement pour quelques étapes d'installation, et le mot de passe est demandé à ce moment-là. Il n'est jamais écrit dans un fichier, jamais passé sur une ligne de commande, et jamais gardé après l'étape.",
 
