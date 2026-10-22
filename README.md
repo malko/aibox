@@ -27,11 +27,11 @@ Scripts for managing an AI development virtual machine with reverse proxy and se
 
 ### Host Machine
 - KVM/QEMU with libvirt
-- virsh, libvirt-client installed
+- virsh, libvirt-client, virt-install installed
 - BusyBox with the `httpd` applet, only for `aibox web`
 
 ```bash
-sudo apt install virsh libvirt-client busybox-static
+sudo apt install libvirt-clients virt-install busybox-static
 ```
 
 On macOS, install BusyBox with Homebrew:
