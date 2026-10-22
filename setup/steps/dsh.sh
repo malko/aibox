@@ -18,7 +18,7 @@ step_dsh() {
     setup_guest_ssh '"$HOME/scripts/install-dsh.sh"'
 
     print_info "Installing dsh-web service..."
-    setup_guest_ssh 'source "$HOME/.bashrc" && "$HOME/scripts/install-dsh-service.sh" '"$DSH_PORT"
+    setup_guest_ssh '"$HOME/scripts/install-dsh-service.sh" '"$DSH_PORT"
 
     source "$SCRIPT_DIR/services-funcs.sh"
     if ! service_exists dsh; then

@@ -18,5 +18,5 @@ step_opencode() {
 
     print_info "Installing opencode server service..."
     print_info "opencode generates its own password at startup (shown in the MOTD and 'aibox status')."
-    setup_guest_ssh 'source "$HOME/.bashrc" && "$HOME/scripts/install-service.sh" '"$OPENCODE_PORT"
+    setup_guest_ssh '"$HOME/scripts/install-service.sh" '"$OPENCODE_PORT"
 }

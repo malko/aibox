@@ -177,10 +177,13 @@ run_target() {
 
     # The web UI has no terminal: feed the guest sudo password on stdin and
     # use 'sudo -S' inside the guest. The CLI keeps the interactive SSH path.
+    # Run the script with bash explicitly: the remote login shell may be zsh
+    # or dash, where BASH_SOURCE is unset and sourcing would resolve the
+    # helper path from the wrong directory.
     if [[ "$target" == "os" && -n "$SUDO_PASSWORD" ]]; then
         printf '%s\n' "$SUDO_PASSWORD" | \
             ssh -T -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" \
-                "IFS= read -r SUDO_PASSWORD; . \"\$HOME/scripts/update-target.sh\" os${remote_extra}"
+                "IFS= read -r SUDO_PASSWORD; export SUDO_PASSWORD; exec bash \"\$HOME/scripts/update-target.sh\" os${remote_extra}"
     else
         ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" \
             "\"\$HOME/scripts/update-target.sh\" $(printf '%q' "$target")${remote_extra}"

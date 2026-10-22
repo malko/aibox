@@ -33,7 +33,8 @@ for target in "$@"; do
 
     status=$?
     if (( status != 0 )); then
-        echo "Update failed: $target" >&2
+        # cmd/update-target already explains which target failed; keep the log
+        # free of a duplicate line.
         rc=1
         break
     fi
