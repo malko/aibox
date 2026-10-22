@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-i18n="meta.title">AIBox — a virtual machine sandbox for your AI agents</title>
-<meta name="description" data-i18n-attr="content:meta.description" content="AIBox gives your AI agents a virtual machine to work in: the agent only reaches the files of the guest, the host stays untouched, and the whole box can be thrown away.">
+<meta name="description" data-i18n-attr="content:meta.description" content="AIBox runs your AI agents in a virtual machine with its own kernel: the agent only reaches the files of the guest, the host stays untouched, and the box can be reset or thrown away.">
 <meta name="theme-color" content="#0b0e13">
 <meta name="color-scheme" content="dark">
 
 <meta property="og:type" content="website">
 <meta property="og:title" data-i18n-attr="content:meta.title" content="AIBox — a virtual machine sandbox for your AI agents">
-<meta property="og:description" data-i18n-attr="content:meta.description" content="AIBox gives your AI agents a virtual machine to work in.">
+<meta property="og:description" data-i18n-attr="content:meta.description" content="AIBox runs your AI agents in a virtual machine with its own kernel.">
 <meta property="og:image" content="https://malko.github.io/aibox/assets/img/og-image.png">
 <meta property="og:url" content="https://malko.github.io/aibox/">
 <meta name="twitter:card" content="summary_large_image">
@@ -29,8 +29,9 @@
     </a>
 
     <nav class="site-nav" id="site-nav" data-i18n-attr="aria-label:nav.sections">
-      <a href="#why" data-i18n="nav.why">why</a>
-      <a href="#isolation" data-i18n="nav.isolation">vm or docker</a>
+      <a href="#model" data-i18n="nav.model">the model</a>
+      <a href="#isolation" data-i18n="nav.isolation">vm or container</a>
+      <a href="#practices" data-i18n="nav.practices">good practices</a>
       <a href="#how" data-i18n="nav.how">how it works</a>
       <a href="#console" data-i18n="nav.console">console</a>
       <a href="#faq" data-i18n="nav.faq">faq</a>
@@ -51,17 +52,18 @@
   <!-- Hero ------------------------------------------------------------- -->
   <section class="shell hero">
     <div>
-      <span class="eyebrow"><span class="dot"></span><span data-i18n="hero.badge">a sandbox for your AI agents</span></span>
+      <span class="eyebrow"><span class="dot"></span><span data-i18n="hero.badge">a virtual machine for your AI agents</span></span>
 
       <h1>
-        <span data-i18n="hero.title">Your agent, in a box it</span>
-        <span class="accent" data-i18n="hero.title.accent">cannot escape.</span>
+        <span data-i18n="hero.title">Your agent works in a VM.</span>
+        <span class="accent" data-i18n="hero.title.accent">Not on your machine.</span>
       </h1>
 
       <p class="hero-lede" data-i18n="hero.lede">
-        AI agents need files, a shell and freedom. Give them a virtual machine:
-        they work in the guest, they break the guest, and your laptop never
-        finds out.
+        An agent is a shell with your permissions, and it does whatever the
+        prompt asks. AIBox runs it inside a virtual machine with its own
+        kernel, its own filesystem and no way back: the only thing it shares
+        with the host is the folder you choose.
       </p>
 
       <div class="hero-actions">
@@ -73,8 +75,8 @@
       <div class="hero-meta">
         <span data-i18n="hero.meta.1">KVM / QEMU + libvirt</span>
         <span data-i18n="hero.meta.2">its own kernel</span>
-        <span data-i18n="hero.meta.3">disposable snapshots</span>
-        <span data-i18n="hero.meta.4">nothing in the cloud</span>
+        <span data-i18n="hero.meta.3">outbound traffic only</span>
+        <span data-i18n="hero.meta.4">nothing collected, nothing in the cloud</span>
       </div>
     </div>
 
@@ -88,100 +90,183 @@
     </div>
   </section>
 
-  <!-- Why -------------------------------------------------------------- -->
-  <section class="section" id="why">
+  <!-- The model -------------------------------------------------------- -->
+  <section class="section" id="model">
     <div class="shell">
       <div class="section-head reveal">
-        <span class="section-kicker" data-i18n="why.kicker">why</span>
-        <h2 data-i18n="why.title">An agent on your machine is an agent on your life</h2>
-        <p data-i18n="why.lede">
-          A coding agent is a shell with your permissions. Hand it your
-          computer and you hand it your keys, your files and your secrets.
+        <span class="section-kicker" data-i18n="model.kicker">the model</span>
+        <h2 data-i18n="model.title">One shared folder, and the agent stays inside</h2>
+        <p data-i18n="model.lede">
+          The day to day workflow is deliberately narrow. AIBox sets up a
+          virtual machine, shares one directory with it, and gives the agent
+          the harnesses it needs. Everything else stays where it belongs.
         </p>
       </div>
 
       <div class="split">
-        <div class="split-card risk reveal">
-          <h3><span class="tag" data-i18n="why.risk.tag">on the host</span><span data-i18n="why.risk.title">What it can reach</span></h3>
-          <p data-i18n="why.risk.lede">Everything the agent's user can reach, and the agent never asks.</p>
-          <ul class="risk-list risk">
-            <li><span class="mark">✕</span><span data-i18n="why.risk.1">Your SSH keys, your .env files, your cloud credentials</span></li>
-            <li><span class="mark">✕</span><span data-i18n="why.risk.2">Your projects, your notes, your browser sessions</span></li>
-            <li><span class="mark">✕</span><span data-i18n="why.risk.3">A wrong command that deletes the wrong directory</span></li>
-            <li><span class="mark">✕</span><span data-i18n="why.risk.4">A system left dirty, with packages and files everywhere</span></li>
-            <li><span class="mark">✕</span><span data-i18n="why.risk.5">Your tokens, sent wherever the prompt takes it</span></li>
+        <div class="split-card safe reveal">
+          <h3><span class="tag" data-i18n="model.card1.tag">1</span><span data-i18n="model.card1.title">A folder, shared both ways</span></h3>
+          <p data-i18n="model.card1.body">
+            The host share is mounted in the guest with virtiofs. The agent
+            works there, exactly as it would work in a directory on your
+            machine.
+          </p>
+          <ul class="risk-list safe">
+            <li><span class="mark">→</span><span data-i18n="model.card1.1">The agent reads and writes the shared folder, and nothing else</span></li>
+            <li><span class="mark">→</span><span data-i18n="model.card1.2">Your keys, your SSH agent, your cloud credentials stay on the host</span></li>
+            <li><span class="mark">→</span><span data-i18n="model.card1.3">The folder is yours to choose: a worktree, a scratch space, a repo</span></li>
           </ul>
         </div>
 
         <div class="split-card safe reveal">
-          <h3><span class="tag" data-i18n="why.safe.tag">in the box</span><span data-i18n="why.safe.title">What it can reach</span></h3>
-          <p data-i18n="why.safe.lede">The guest filesystem, and nothing else. The boundary is the kernel.</p>
+          <h3><span class="tag" data-i18n="model.card2.tag">2</span><span data-i18n="model.card2.title">Local commits, and you push</span></h3>
+          <p data-i18n="model.card2.body">
+            Without credentials in the guest, the agent can commit but it
+            cannot push. You keep the last word on what leaves your machine.
+          </p>
           <ul class="risk-list safe">
-            <li><span class="mark">✓</span><span data-i18n="why.safe.1">The files of the virtual machine, and the shared folder</span></li>
-            <li><span class="mark">✓</span><span data-i18n="why.safe.2">Your projects, but the copies inside the guest</span></li>
-            <li><span class="mark">✓</span><span data-i18n="why.safe.3">A wrong command that breaks the guest, and nothing else</span></li>
-            <li><span class="mark">✓</span><span data-i18n="why.safe.4">A snapshot to go back to</span></li>
-            <li><span class="mark">✓</span><span data-i18n="why.safe.5">A box you delete without a second thought</span></li>
+            <li><span class="mark">→</span><span data-i18n="model.card2.1">The agent commits locally in the shared folder</span></li>
+            <li><span class="mark">→</span><span data-i18n="model.card2.2">It has no git credentials, so it cannot push to your remotes</span></li>
+            <li><span class="mark">→</span><span data-i18n="model.card2.3">You read the diff and push, from the host, with your own keys</span></li>
           </ul>
         </div>
+      </div>
+
+      <div class="note reveal" style="margin-top: 20px;">
+        <span class="mark">→</span>
+        <span data-i18n-html="model.note">AIBox is not a sandbox that certifies anything. It is a boundary that is easy to set up and hard to cross by accident: the guest has its own kernel, the host filesystem is not in its namespace, and the network is outbound only unless you open it yourself.</span>
       </div>
     </div>
   </section>
 
-  <!-- VM or Docker ----------------------------------------------------- -->
+  <!-- VM or container -------------------------------------------------- -->
   <section class="section" id="isolation">
     <div class="shell">
       <div class="section-head reveal">
         <span class="section-kicker" data-i18n="isolation.kicker">isolation</span>
-        <h2 data-i18n="isolation.title">Why a virtual machine, and not a container</h2>
+        <h2 data-i18n="isolation.title">What actually separates the agent from your machine</h2>
         <p data-i18n="isolation.lede">
-          A container is a process with a few walls around it. A virtual
-          machine is another computer. When the agent is the one you do not
-          trust, that difference is the whole point.
+          The same agent, in three places. The difference is not a policy
+          file, it is what the kernel and the hypervisor enforce.
         </p>
       </div>
 
       <div class="compare reveal">
         <div class="compare-row head">
           <div data-i18n="isolation.head.what">what</div>
-          <div data-i18n="isolation.head.docker">a container</div>
-          <div class="win" data-i18n="isolation.head.vm">a virtual machine</div>
+          <div data-i18n="isolation.head.host">on your machine</div>
+          <div data-i18n="isolation.head.docker">in a container</div>
+          <div class="win" data-i18n="isolation.head.vm">in a virtual machine</div>
         </div>
         <div class="compare-row">
           <div class="label" data-i18n="isolation.row1.label">Kernel</div>
-          <div class="col" data-i18n="isolation.row1.docker">Shared with the host</div>
-          <div class="win" data-i18n="isolation.row1.vm">Its own, in the guest</div>
+          <div class="col risk" data-i18n="isolation.row1.host">The host kernel, with your uid</div>
+          <div class="col" data-i18n="isolation.row1.docker">The host kernel, shared with the host</div>
+          <div class="win" data-i18n="isolation.row1.vm">Its own kernel, in the guest</div>
         </div>
         <div class="compare-row">
           <div class="label" data-i18n="isolation.row2.label">Files</div>
-          <div class="col" data-i18n="isolation.row2.docker">The host filesystem, unless you mount it very carefully</div>
+          <div class="col risk" data-i18n="isolation.row2.host">Everything your user can read</div>
+          <div class="col" data-i18n="isolation.row2.docker">The host filesystem, unless you mount it carefully</div>
           <div class="win" data-i18n="isolation.row2.vm">Only the guest filesystem</div>
         </div>
         <div class="compare-row">
-          <div class="label" data-i18n="isolation.row3.label">Escape</div>
-          <div class="col" data-i18n="isolation.row3.docker">A container escape is a host compromise</div>
-          <div class="win" data-i18n="isolation.row3.vm">The guest kernel is the wall, root included</div>
+          <div class="label" data-i18n="isolation.row3.label">Credentials</div>
+          <div class="col risk" data-i18n="isolation.row3.host">SSH keys, cloud credentials, browser sessions</div>
+          <div class="col" data-i18n="isolation.row3.docker">Same, as soon as you mount the home or pass a socket</div>
+          <div class="win" data-i18n="isolation.row3.vm">None, unless you put them there</div>
         </div>
         <div class="compare-row">
           <div class="label" data-i18n="isolation.row4.label">Devices</div>
-          <div class="col" data-i18n="isolation.row4.docker">The host devices, if you are not careful</div>
-          <div class="win" data-i18n="isolation.row4.vm">Emulated, with your permission</div>
+          <div class="col risk" data-i18n="isolation.row4.host">The real ones, with your permissions</div>
+          <div class="col" data-i18n="isolation.row4.docker">The host devices, when the runtime is not careful</div>
+          <div class="win" data-i18n="isolation.row4.vm">Emulated, through the hypervisor</div>
         </div>
         <div class="compare-row">
-          <div class="label" data-i18n="isolation.row5.label">Blast radius</div>
-          <div class="col" data-i18n="isolation.row5.docker">The whole workstation</div>
-          <div class="win" data-i18n="isolation.row5.vm">One disposable disk</div>
+          <div class="label" data-i18n="isolation.row5.label">Network</div>
+          <div class="col risk" data-i18n="isolation.row5.host">Your network, your host name, your ports</div>
+          <div class="col" data-i18n="isolation.row5.docker">Your network, with a bridge or host mode</div>
+          <div class="win" data-i18n="isolation.row5.vm">NAT, outbound only, inbound closed</div>
         </div>
         <div class="compare-row">
-          <div class="label" data-i18n="isolation.row6.label">Reset</div>
-          <div class="col" data-i18n="isolation.row6.docker">Delete the container, lose the work</div>
-          <div class="win" data-i18n="isolation.row6.vm">Revert a snapshot, keep the work</div>
+          <div class="label" data-i18n="isolation.row6.label">Escape</div>
+          <div class="col risk" data-i18n="isolation.row6.host">No escape needed, it is already there</div>
+          <div class="col" data-i18n="isolation.row6.docker">A kernel or runtime flaw is a host compromise</div>
+          <div class="win" data-i18n="isolation.row6.vm">The guest kernel is the wall, root included</div>
+        </div>
+        <div class="compare-row">
+          <div class="label" data-i18n="isolation.row7.label">Blast radius</div>
+          <div class="col risk" data-i18n="isolation.row7.host">Your workstation</div>
+          <div class="col" data-i18n="isolation.row7.docker">Your workstation</div>
+          <div class="win" data-i18n="isolation.row7.vm">One disk image you can throw away</div>
         </div>
       </div>
 
+      <p class="compare-hint" data-i18n="isolation.scroll">Scroll the table to see the three columns.</p>
+
       <div class="note reveal" style="margin-top: 20px;">
         <span class="mark">→</span>
-        <span data-i18n-html="isolation.note">A container is fine to isolate a build. It is not fine to isolate an agent that writes its own code and runs it. AIBox uses a virtual machine, and a real kernel, for that reason.</span>
+        <span data-i18n-html="isolation.note">A container is the right tool to isolate a build. It is a configuration, not a guarantee: the usual development setups bind the home directory, mount the Docker socket, or run with extra capabilities, and each of those puts the host back in reach. A virtual machine moves the boundary into the kernel, where the agent has no say.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Practices -------------------------------------------------------- -->
+  <section class="section" id="practices">
+    <div class="shell">
+      <div class="section-head reveal">
+        <span class="section-kicker" data-i18n="practices.kicker">good practices</span>
+        <h2 data-i18n="practices.title">How to use the box without shooting yourself in the foot</h2>
+        <p data-i18n="practices.lede">
+          The box protects the host from the agent. It does not protect the
+          agent from the internet, and it does not protect you from your own
+          habits. A few rules keep the value high.
+        </p>
+      </div>
+
+      <div class="practices">
+        <div class="practice reveal">
+          <span class="mark">1</span>
+          <div>
+            <h3 data-i18n="practice.1.title">Never put your keys in the guest</h3>
+            <p data-i18n-html="practice.1.body">No SSH key, no git credential, no <code>~/.aws</code>, no token file. The guest is the one place you cannot watch. An agent that finds a key will use it.</p>
+          </div>
+        </div>
+        <div class="practice reveal">
+          <span class="mark">2</span>
+          <div>
+            <h3 data-i18n="practice.2.title">Share only what the task needs</h3>
+            <p data-i18n="practice.2.body">The share is the one door between the host and the agent. A worktree for the current task is enough; sharing your whole home is not.</p>
+          </div>
+        </div>
+        <div class="practice reveal">
+          <span class="mark">3</span>
+          <div>
+            <h3 data-i18n="practice.3.title">Keep the box closed to the network</h3>
+            <p data-i18n="practice.3.body">The guest is behind NAT: it can reach the internet, the internet cannot reach it. Leave it that way unless you need a service to be reachable, and open it per service.</p>
+          </div>
+        </div>
+        <div class="practice reveal">
+          <span class="mark">4</span>
+          <div>
+            <h3 data-i18n="practice.4.title">Snapshot before a risky run</h3>
+            <p data-i18n="practice.4.body">A snapshot takes seconds and gives you a way back. A broken agent becomes an interesting state to look at instead of a lost afternoon.</p>
+          </div>
+        </div>
+        <div class="practice reveal">
+          <span class="mark">5</span>
+          <div>
+            <h3 data-i18n="practice.5.title">Read the diff before you push</h3>
+            <p data-i18n="practice.5.body">The agent commits locally because it has no credentials. That is the point: you are the one deciding what goes out.</p>
+          </div>
+        </div>
+        <div class="practice reveal">
+          <span class="mark">6</span>
+          <div>
+            <h3 data-i18n="practice.6.title">Know what the agent can still reach</h3>
+            <p data-i18n="practice.6.body">The agent has outbound internet access, like any program you run. AIBox collects nothing and sends nothing, but what the agent does with the network is between you and your provider.</p>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -191,11 +276,11 @@
     <div class="shell">
       <div class="section-head reveal">
         <span class="section-kicker" data-i18n="playground.kicker">playground</span>
-        <h2 data-i18n="playground.title">A playground you can break and throw away</h2>
+        <h2 data-i18n="playground.title">A box you can break, reset and throw away</h2>
         <p data-i18n="playground.lede">
-          The point is not only to protect the machine. It is to give the agent
-          a place where it can try things — and to make that place easy to
-          create, easy to reset and easy to share.
+          Setting up a sandboxed agent environment is not hard, but it is
+          tedious, and it is easy to get wrong. AIBox does the boring part so
+          that managing the box is not a second project.
         </p>
       </div>
 
@@ -203,7 +288,7 @@
         <article class="card reveal">
           <div class="card-icon">1</div>
           <h3 data-i18n="feature.1.title">One-command setup</h3>
-          <p data-i18n="feature.1.body">A guided setup builds the guest, the SSH access, the services and the tunnel, step by step.</p>
+          <p data-i18n="feature.1.body">A guided setup builds the guest, the SSH access, the services and the tunnel, step by step. Every answer is saved.</p>
         </article>
         <article class="card reveal">
           <div class="card-icon cyan">2</div>
@@ -217,8 +302,8 @@
         </article>
         <article class="card reveal">
           <div class="card-icon">4</div>
-          <h3 data-i18n="feature.6.title">VS Code Remote-SSH</h3>
-          <p data-i18n="feature.6.body">Open the shared folder in your own VS Code. The host path is mapped to the guest path for you.</p>
+          <h3 data-i18n="feature.6.title">VS Code, two ways</h3>
+          <p data-i18n="feature.6.body">The Remote-SSH extension on your VS Code, or the VS Code Server running inside the guest. Both are installed for you.</p>
         </article>
         <article class="card reveal">
           <div class="card-icon cyan">5</div>
@@ -232,13 +317,13 @@
         </article>
         <article class="card reveal">
           <div class="card-icon">7</div>
-          <h3 data-i18n="feature.7.title">Your harnesses, installed</h3>
-          <p data-i18n="feature.7.body">The setup installs opencode, the DeepSeek Harness and Claude Code in the guest, and registers their services for you.</p>
+          <h3 data-i18n="feature.7.title">The harnesses, wired</h3>
+          <p data-i18n="feature.7.body">Everything needed to install, update and expose opencode, Claude Code and the DeepSeek Harness is already handled.</p>
         </article>
         <article class="card reveal">
           <div class="card-icon cyan">8</div>
-          <h3 data-i18n="feature.8.title">Updates you can see</h3>
-          <p data-i18n="feature.8.body">Check the host and the VM for updates, then apply them one target at a time — a service, a script, the OS or all of them.</p>
+          <h3 data-i18n="feature.8.title">Easy updates</h3>
+          <p data-i18n="feature.8.body">Check the host and the VM, then update a service, the scripts, the OS or all of them, one target at a time.</p>
         </article>
       </div>
     </div>
@@ -249,11 +334,11 @@
     <div class="shell">
       <div class="section-head reveal">
         <span class="section-kicker" data-i18n="network.kicker">network</span>
-        <h2 data-i18n="network.title">One door into the box</h2>
+        <h2 data-i18n="network.title">Outbound by default, one door in</h2>
         <p data-i18n="network.lede">
-          The VM is never exposed directly. Every service travels through a
-          single SSH tunnel, and only the services you choose can leave the
-          machine.
+          The VM sits behind NAT. It can reach the internet, the internet
+          cannot reach it, and the only path from your machine to the guest is
+          the SSH tunnel.
         </p>
       </div>
 
@@ -323,8 +408,10 @@
             <span class="step-no" data-i18n="how.step1.no">step 1</span>
             <h3 data-i18n="how.step1.title">Set the box up</h3>
             <p data-i18n="how.step1.body">
-              The setup walks through the VM, SSH, the services and the tunnel.
-              Every answer is saved, so a second run only asks what changed.
+              The setup creates the guest image, generates a key pair for it,
+              installs the packages, the services and the tunnel, and shares
+              the folder. Every answer is saved, so a second run only asks
+              what changed.
             </p>
           </div>
           <div class="code">
@@ -363,7 +450,7 @@
             <p data-i18n="how.step3.body">
               The local console shows the services with a live availability
               dot, and gives you the VM controls, the snapshots and the
-              updates.
+              updates. It stops when you close the tab.
             </p>
           </div>
           <div class="code">
@@ -375,6 +462,11 @@
           </div>
         </div>
       </div>
+
+      <div class="note reveal" style="margin-top: 22px;">
+        <span class="mark">→</span>
+        <span data-i18n-html="how.note">The tunnel is a systemd user service, so it comes back with your session even without a terminal. The virtual machine itself is <b>not</b> started automatically: the host does not restart it after a reboot, and you start it with <code>aibox start</code>.</span>
+      </div>
     </div>
   </section>
 
@@ -383,14 +475,46 @@
     <div class="shell">
       <div class="section-head reveal">
         <span class="section-kicker" data-i18n="console.kicker">the console</span>
-        <h2 data-i18n="console.title">The web console, in three views</h2>
+        <h2 data-i18n="console.title">A convenience, not a service</h2>
         <p data-i18n="console.lede">
-          The same state the CLI shows, in a browser tab that stays on your
-          machine — no account, no server, no telemetry.
+          The console exists for the people who would rather click than type,
+          and for the moments when a browser is nicer than a terminal. It is
+          not something you are meant to leave running.
         </p>
       </div>
 
-      <div class="showcase">
+      <div class="practices">
+        <div class="practice reveal">
+          <span class="mark">↓</span>
+          <div>
+            <h3 data-i18n="console.practice1.title">It stops with the tab</h3>
+            <p data-i18n="console.practice1.body">Closing the browser tab asks the console to stop, a few seconds later. There is no daemon left behind, and no port left open.</p>
+          </div>
+        </div>
+        <div class="practice reveal">
+          <span class="mark">↓</span>
+          <div>
+            <h3 data-i18n="console.practice2.title">It listens on 127.0.0.1 only</h3>
+            <p data-i18n="console.practice2.body">The console is never reachable from the network. When the configured port is busy, it takes the next free one instead of failing.</p>
+          </div>
+        </div>
+        <div class="practice reveal">
+          <span class="mark">↓</span>
+          <div>
+            <h3 data-i18n="console.practice3.title">A token per session</h3>
+            <p data-i18n="console.practice3.body">A random token is generated at every start and passed in the URL fragment. The API also rejects foreign Host and Origin headers, so another site cannot drive your console.</p>
+          </div>
+        </div>
+        <div class="practice reveal">
+          <span class="mark">↓</span>
+          <div>
+            <h3 data-i18n="console.practice4.title">The root password is asked, never kept</h3>
+            <p data-i18n="console.practice4.body">A step that needs sudo asks for the password at that moment. It stays in one shell variable for that step, is never written to a file, never appears in a command line, and is gone when the step ends.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="showcase" style="margin-top: 34px;">
         <figure class="reveal">
           <div class="shot">
             <div class="shot-bar">
@@ -423,6 +547,47 @@
           </div>
           <figcaption><span class="n">03</span><span><b data-i18n="console.3.title">Snapshots</b> — <span data-i18n="console.3.body">Create a snapshot before a risky change.</span></span></figcaption>
         </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- VS Code ---------------------------------------------------------- -->
+  <section class="section" id="vscode">
+    <div class="shell">
+      <div class="section-head reveal">
+        <span class="section-kicker" data-i18n="vscode.kicker">vs code</span>
+        <h2 data-i18n="vscode.title">Two ways to open the guest</h2>
+        <p data-i18n="vscode.lede">
+          Both are supported, and both are installed for you. Pick the one
+          that fits how you work.
+        </p>
+      </div>
+
+      <div class="split">
+        <div class="split-card reveal">
+          <h3><span class="tag" data-i18n="vscode.card1.tag">remote-ssh</span><span data-i18n="vscode.card1.title">Your VS Code, over SSH</span></h3>
+          <p data-i18n="vscode.card1.body">
+            The Remote-SSH extension connects to the guest through the same
+            tunnel as everything else. The host path is mapped to the guest
+            path, so you open a local folder and edit it remotely.
+          </p>
+          <ul class="risk-list safe">
+            <li><span class="mark">→</span><span data-i18n="vscode.card1.1">Your own VS Code, your own settings, your own extensions</span></li>
+            <li><span class="mark">→</span><span data-i18n-html="vscode.card1.2"><code>aibox vscode</code> opens it on the right folder</span></li>
+          </ul>
+        </div>
+
+        <div class="split-card reveal">
+          <h3><span class="tag" data-i18n="vscode.card2.tag">vs code server</span><span data-i18n="vscode.card2.title">The server, inside the guest</span></h3>
+          <p data-i18n="vscode.card2.body">
+            The setup installs the VS Code Server in the guest, so a browser
+            based VS Code can run entirely inside the virtual machine.
+          </p>
+          <ul class="risk-list safe">
+            <li><span class="mark">→</span><span data-i18n="vscode.card2.1">The editor itself runs in the guest, not on your host</span></li>
+            <li><span class="mark">→</span><span data-i18n-html="vscode.card2.2">Kept up to date with <code>aibox update vscode-server</code></span></li>
+          </ul>
+        </div>
       </div>
     </div>
   </section>
@@ -468,8 +633,8 @@
           <h3 data-i18n="req.host.title">host</h3>
           <ul>
             <li data-i18n="req.host.1">KVM/QEMU with libvirt</li>
-            <li data-i18n="req.host.2"><code>virsh</code> and <code>libvirt-client</code></li>
-            <li data-i18n="req.host.3">BusyBox <code>httpd</code> for the web console</li>
+            <li data-i18n-html="req.host.2"><code>virsh</code> and <code>libvirt-client</code></li>
+            <li data-i18n-html="req.host.3">BusyBox <code>httpd</code> for the web console</li>
             <li data-i18n="req.host.4">A Linux distribution, on bare metal or on a workstation</li>
           </ul>
         </div>
@@ -486,7 +651,7 @@
 
       <div class="note reveal" style="margin-top: 20px;">
         <span class="mark">→</span>
-        <span data-i18n="req.note">macOS is not supported yet. The Lima based support is being finished, and it will land here.</span>
+        <span data-i18n="req.note">macOS is not supported yet: the Lima based support is being finished, and it will land here. Windows is not planned, the host scripts assume a Linux system with libvirt.</span>
       </div>
     </div>
   </section>
@@ -497,41 +662,57 @@
       <div class="section-head reveal">
         <span class="section-kicker" data-i18n="faq.kicker">faq</span>
         <h2 data-i18n="faq.title">The questions people actually ask</h2>
-        <p data-i18n="faq.lede">Short answers, no marketing.</p>
+        <p data-i18n="faq.lede">Short answers, including the limits.</p>
       </div>
 
       <div class="faq reveal">
         <details>
           <summary data-i18n="faq.1.q">Can the agent reach my files?</summary>
-          <div class="answer" data-i18n="faq.1.a">Only the ones you put in the shared folder, and the ones inside the guest. Your SSH keys, your browser sessions and the rest of the workstation stay out of reach: the agent works in a virtual machine with its own kernel.</div>
+          <div class="answer" data-i18n="faq.1.a">Only the ones in the shared folder, and the ones inside the guest. Your SSH keys, your browser sessions and the rest of the workstation are not in the guest's filesystem.</div>
         </details>
         <details>
           <summary data-i18n="faq.2.q">Why a virtual machine and not Docker?</summary>
-          <div class="answer" data-i18n="faq.2.a">A container shares the kernel and the filesystem of the host: a container escape, or a badly written mount, hands the agent your whole machine. A virtual machine has its own kernel, and that kernel is the boundary. For a build, a container is enough. For an agent that writes and runs its own code, it is not.</div>
+          <div class="answer" data-i18n="faq.2.a">A container shares the host kernel and, in most development setups, the host home directory or the Docker socket. A virtual machine has its own kernel, and the host filesystem is simply not in its namespace. For a build, a container is enough. For an agent that writes and runs its own code, the boundary has to be below the process.</div>
         </details>
         <details>
-          <summary data-i18n="faq.3.q">What if the agent breaks everything?</summary>
-          <div class="answer" data-i18n="faq.3.a">You take a snapshot before it starts, and you revert it afterwards. The broken state stays available to look at, and the host never saw any of it.</div>
+          <summary data-i18n="faq.3.q">Is the box really isolated?</summary>
+          <div class="answer" data-i18n="faq.3.a">It is a boundary, not a proof. The share is a real door, the agent has outbound internet access, and a bridged network or a forwarded port would open the guest. What AIBox does is make the safe configuration the default one, and the unsafe one something you have to ask for explicitly.</div>
         </details>
         <details>
-          <summary data-i18n="faq.4.q">Does any of my data leave the machine?</summary>
-          <div class="answer" data-i18n="faq.4.a">No. The VM runs on your hardware, the console is served by BusyBox on your machine and the tunnels are plain SSH. There is no account, no telemetry and no cloud service in the loop.</div>
+          <summary data-i18n="faq.4.q">Does the agent have internet access?</summary>
+          <div class="answer" data-i18n="faq.4.a">Yes, like any program you run: the guest is behind NAT, so it can reach the internet and the internet cannot reach it. AIBox itself collects nothing and sends nothing, but what your agent does with the network depends on your provider and on you.</div>
         </details>
         <details>
-          <summary data-i18n="faq.5.q">Do I need root on the host?</summary>
-          <div class="answer" data-i18n="faq.5.a">Only for a few setup steps, and the console asks for the sudo password once, in memory, when a privileged step needs it. Everything else runs as your user.</div>
+          <summary data-i18n="faq.5.q">What if the agent breaks everything?</summary>
+          <div class="answer" data-i18n="faq.5.a">You take a snapshot before it starts, and you revert it afterwards. The broken state stays available to look at, and the host never saw any of it.</div>
         </details>
         <details>
-          <summary data-i18n="faq.6.q">Can I run my own services?</summary>
-          <div class="answer" data-i18n="faq.6.a">Yes. <code>aibox service-add mytool 8080</code> registers a port, and the tunnel, the console and the status output pick it up right away.</div>
+          <summary data-i18n="faq.6.q">Is the web console a service I should leave running?</summary>
+          <div class="answer" data-i18n="faq.6.a">No. It is a foreground command: it listens on 127.0.0.1 only, and it stops shortly after you close the tab. The token it needs is generated at every start, and the API rejects foreign Host and Origin headers.</div>
         </details>
         <details>
-          <summary data-i18n="faq.7.q">How do I reach a service from another device?</summary>
-          <div class="answer" data-i18n="faq.7.a">Expose that service on the LAN: <code>aibox tunnel lan on opencode --permanent</code>. The tunnel binds the port on your network interface instead of localhost, for that service only.</div>
+          <summary data-i18n="faq.7.q">Does the box start with my computer?</summary>
+          <div class="answer" data-i18n-html="faq.7.a">The tunnel is a systemd user service, so it starts with your session. The virtual machine is not started for you: a host reboot leaves it off, and you bring it up with <code>aibox start</code>.</div>
         </details>
         <details>
-          <summary data-i18n="faq.8.q">Is macOS supported?</summary>
-          <div class="answer" data-i18n="faq.8.a">Not yet. The Lima based support is on its way, and the site will say so as soon as it works.</div>
+          <summary data-i18n="faq.8.q">Does any of my data leave the machine?</summary>
+          <div class="answer" data-i18n="faq.8.a">AIBox does not collect, store or send anything: the VM runs on your hardware, the console is served by BusyBox on your machine and the tunnels are plain SSH. The agent, on the other hand, has the same internet access as any program you run.</div>
+        </details>
+        <details>
+          <summary data-i18n="faq.9.q">Is macOS supported? Is Windows?</summary>
+          <div class="answer" data-i18n="faq.9.a">macOS is on the way: the Lima based support is being finished. Windows is not planned, the host scripts assume a Linux system with libvirt.</div>
+        </details>
+        <details>
+          <summary data-i18n="faq.10.q">Can I run my own services?</summary>
+          <div class="answer" data-i18n-html="faq.10.a">Yes. <code>aibox service-add mytool 8080</code> registers a port, and the tunnel, the console and the status output pick it up right away.</div>
+        </details>
+        <details>
+          <summary data-i18n="faq.11.q">How do I reach a service from another device?</summary>
+          <div class="answer" data-i18n-html="faq.11.a">Expose that service on the LAN: <code>aibox tunnel lan on opencode --permanent</code>. The tunnel binds the port on your network interface instead of localhost, for that service only.</div>
+        </details>
+        <details>
+          <summary data-i18n="faq.12.q">Do I need root on the host?</summary>
+          <div class="answer" data-i18n="faq.12.a">Only for a few setup steps, and the password is asked at that moment. It is never written to a file, never passed on a command line and never kept after the step ends.</div>
         </details>
       </div>
     </div>
@@ -541,7 +722,7 @@
   <section class="section">
     <div class="shell">
       <div class="cta reveal">
-        <h2 data-i18n="cta.title">Give your agent a box to break</h2>
+        <h2 data-i18n="cta.title">Give your agent a box to work in</h2>
         <p data-i18n="cta.lede">
           One repository, a handful of shell scripts, and a virtual machine
           that behaves like a machine you own. Clone it, run the setup, and

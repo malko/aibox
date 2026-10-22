@@ -95,7 +95,9 @@ if (i18nSource) {
   while ((catalogMatch = catalogPattern.exec(i18nSource)) !== null) {
     const body = catalogMatch[2];
     const keys = [...body.matchAll(/"([^"]+)":/g)].map((m) => m[1]);
+    const values = [...body.matchAll(/"([^"]+)":\s*"([\s\S]*?)",\n/g)].map((m) => [m[1], m[2]]);
     catalogs[catalogMatch[1]] = keys;
+    catalogs[`${catalogMatch[1]}_values`] = values;
   }
 
   if (!catalogs.en || !catalogs.fr) {
@@ -125,6 +127,18 @@ if (i18nSource) {
     }
     for (const key of used) {
       if (!en.has(key)) fail(`translation used in the markup but not defined: ${key}`);
+    }
+
+    /* A translation holding markup must be applied as HTML, otherwise the
+       tags are shown as text. */
+    const markupKeys = new Set();
+    for (const [key, text] of catalogs.en_values || []) {
+      if (/<[a-z]/i.test(text)) markupKeys.add(key);
+    }
+    for (const m of html.matchAll(/data-i18n\s*=\s*"([^"]+)"/g)) {
+      if (markupKeys.has(m[1])) {
+        fail(`translation with markup applied as text, use data-i18n-html: ${m[1]}`);
+      }
     }
   }
 }
