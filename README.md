@@ -176,11 +176,14 @@ your local ssh-agent to sign as you, e.g. to `git push`.
 
 ### Shell completion
 
+The `cli` setup step installs completion automatically for the login shell
+(`bash` or `zsh`) and updates the matching rc file. To install it by hand:
+
 ```bash
 # Bash
 ./aibox --completion bash > ~/.local/share/bash-completion/completions/aibox
 
-# Zsh (add ~/.zsh/completions to fpath)
+# Zsh (the setup step also adds ~/.zsh/completions to fpath and registers _aibox)
 ./aibox --completion zsh > ~/.zsh/completions/_aibox
 ```
 
