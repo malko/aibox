@@ -1,6 +1,11 @@
 # AIBox
 
+[![Site](https://img.shields.io/badge/site-malko.github.io%2Faibox-orange?style=flat-square)](https://malko.github.io/aibox/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 Scripts for managing an AI development virtual machine with reverse proxy and service management.
+
+**→ [malko.github.io/aibox](https://malko.github.io/aibox/)** — the project site, with the features, the network model and the quick start.
 
 ## Quick Start
 
