@@ -9,7 +9,7 @@
 AIBOX_ROOT="${AIBOX_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 AIBOX_BIN="$AIBOX_ROOT/aibox"
 AIBOX_WEB_PORT="${AIBOX_WEB_PORT:-8787}"
-AIBOX_WEB_TOKEN_FILE="${AIBOX_WEB_TOKEN_FILE:-$HOME/.config/aibox/web-token}"
+AIBOX_WEB_TOKEN_FILE="${AIBOX_WEB_TOKEN_FILE:-${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-web.token}"
 AIBOX_WEB_JOBS_DIR="${AIBOX_WEB_JOBS_DIR:-${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-web/jobs}"
 AIBOX_WEB_QUIT_FLAG="${AIBOX_WEB_QUIT_FLAG:-${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-web.quit}"
 AIBOX_WEB_SESSION_FILE="${AIBOX_WEB_SESSION_FILE:-${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-web.session}"

@@ -242,10 +242,12 @@ The console provides:
 The interface language is selected in the **réglages / settings** section and
 is remembered in the browser (`localStorage`). The default is English.
 
-The access token is stored in `~/.config/aibox/web-token` (mode `600`) and is
-passed to the browser in the URL fragment. The API requires it as a bearer
-token, rejects non-local `Host`/`Origin` headers, and never listens on the LAN.
-Keys `1`–`6` switch between the console sections.
+The access token is generated at every start, in the runtime directory
+(`${XDG_RUNTIME_DIR}/aibox-web.token`, mode `600`), and is passed to the
+browser in the URL fragment. The API requires it as a bearer token, rejects
+non-local `Host`/`Origin` headers, and never listens on the LAN. When the
+configured port is busy, the console takes the next free one. Keys `1`–`6`
+switch between the console sections.
 
 ### Run a command in the VM
 

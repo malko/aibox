@@ -22,7 +22,8 @@ usage_web() {
     echo "Press Ctrl+C to stop it, or use the Quit button in the interface."
     echo ""
     echo "Options:"
-    echo "  --port <port>   Listen on this port (default: WEB_PORT or 8787)"
+    echo "  --port <port>   Listen on this port (default: WEB_PORT or 8787,"
+    echo "                  the next free port is taken when it is busy)"
     echo "  --no-open       Do not open the browser automatically"
     echo "  -h, --help      Show this help"
     echo ""
@@ -72,13 +73,26 @@ if [[ ! "$WEB_PORT" =~ ^[0-9]+$ ]] || (( 10#$WEB_PORT < 1 || 10#$WEB_PORT > 6553
 fi
 
 WEB_ROOT="$SCRIPT_DIR/web/public"
-TOKEN_FILE="$HOME/.config/aibox/web-token"
 JOBS_DIR="${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-web/jobs"
 PID_FILE="${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-web.pid"
 QUIT_FLAG="${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-web.quit"
 SESSION_FILE="${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-web.session"
+# The session token is generated at every start, in the runtime directory.
+# It is never written to the config directory: a page opened from another
+# site cannot guess it, and it disappears with the session.
+TOKEN_FILE="${XDG_RUNTIME_DIR:-$HOME/.cache}/aibox-web.token"
 LOG_DIR="$HOME/.local/state/aibox/web"
 LOG_FILE="$LOG_DIR/httpd.log"
+
+# True when the port can be bound on the loopback.
+port_is_free() {
+    local port="$1"
+    if command -v nc &>/dev/null; then
+        ! nc -z -w 1 127.0.0.1 "$port" &>/dev/null
+    else
+        ! (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null
+    fi
+}
 
 BUSYBOX_BIN=""
 if command -v busybox &>/dev/null; then
@@ -118,24 +132,40 @@ if [[ -f "$PID_FILE" ]]; then
     rm -f "$PID_FILE"
 fi
 
-if command -v nc &>/dev/null && nc -z -w 1 127.0.0.1 "$WEB_PORT" &>/dev/null; then
-    echo "Error: 127.0.0.1:$WEB_PORT is already in use." >&2
-    echo "Use 'aibox web --port <other-port>'." >&2
-    exit 1
+# The port is dynamic: when the preferred one is taken, the next free port is
+# used, so the console never collides with another tool. An explicit --port
+# is never moved, the caller asked for that one.
+PREFERRED_PORT="$WEB_PORT"
+if ! port_is_free "$WEB_PORT"; then
+    if [[ -n "$PORT_OVERRIDE" ]]; then
+        echo "Error: 127.0.0.1:$WEB_PORT is already in use." >&2
+        echo "Use 'aibox web --port <other-port>'." >&2
+        exit 1
+    fi
+    for (( candidate = PREFERRED_PORT + 1; candidate <= PREFERRED_PORT + 20; candidate++ )); do
+        if port_is_free "$candidate"; then
+            WEB_PORT="$candidate"
+            break
+        fi
+    done
+    if [[ "$WEB_PORT" == "$PREFERRED_PORT" ]]; then
+        echo "Error: no free port found around $PREFERRED_PORT." >&2
+        exit 1
+    fi
+    echo "Port $PREFERRED_PORT is busy, the console listens on $WEB_PORT instead." >&2
 fi
 
 mkdir -p "$(dirname "$TOKEN_FILE")" "$JOBS_DIR" "$LOG_DIR"
 chmod 700 "$JOBS_DIR" 2>/dev/null || true
 rm -f "$QUIT_FLAG" "$SESSION_FILE"
 
-if [[ ! -s "$TOKEN_FILE" ]]; then
-    if command -v od &>/dev/null; then
-        (umask 077; dd if=/dev/urandom bs=32 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n' > "$TOKEN_FILE")
-    else
-        echo "Error: cannot generate a web token (od is missing)." >&2
-        exit 1
-    fi
+# A fresh token for every run.
+rm -f "$TOKEN_FILE" "$HOME/.config/aibox/web-token"
+if ! command -v od &>/dev/null; then
+    echo "Error: cannot generate a web token (od is missing)." >&2
+    exit 1
 fi
+(umask 077; dd if=/dev/urandom bs=32 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n' > "$TOKEN_FILE")
 chmod 600 "$TOKEN_FILE" 2>/dev/null || true
 TOKEN=$(cat "$TOKEN_FILE")
 if [[ -z "$TOKEN" ]]; then
