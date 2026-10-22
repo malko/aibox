@@ -68,7 +68,7 @@ declare -A SETUP_STEP_DESC=(
     [claude]="Install Claude Code"
     [update-check]="Install the automatic update check"
     [virtiofs]="Configure the virtiofs git share with the host"
-    [cli]="Link 'aibox' into ~/bin and enable shell completion"
+    [cli]="Link 'aibox' into ~/.local/bin and enable shell completion"
     [tunnel]="Install the tunnel user service on the host"
 )
 

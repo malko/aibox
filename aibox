@@ -241,7 +241,10 @@ case $state in
         _aibox_tunnel
         ;;
       vscode)
-        _files -/
+        _arguments \
+          '--guest-path[open a path inside the VM]:path:_files -/' \
+          '(-h --help)'{-h,--help}'[show help]' \
+          '1:directory:_files -/'
         ;;
       service-add)
         _arguments \

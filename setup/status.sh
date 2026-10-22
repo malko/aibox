@@ -183,7 +183,8 @@ status_collect() {
                 fi
                 ;;
             cli)
-                if [[ -L "$HOME/bin/aibox" || -x "$HOME/bin/aibox" ]]; then
+                if [[ -L "$HOME/.local/bin/aibox" || -x "$HOME/.local/bin/aibox" \
+                   || -L "$HOME/bin/aibox" || -x "$HOME/bin/aibox" ]]; then
                     status="installed"
                 else
                     status="missing"

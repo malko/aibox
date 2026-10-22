@@ -398,9 +398,9 @@ Steps (in order): `vm`, `ssh`, `scripts`, `deps`, `sshd`, `git`, `dirs`,
 `hosts`, `motd`, `docker`, `vscode`, `opencode`, `dsh`, `claude`, `update-check`,
 `virtiofs`, `cli`, `tunnel`. Each step is implemented in `setup/steps/`.
 
-The `cli` step is host-only: it links `aibox` into `~/bin`, adds `~/bin` to
-`PATH` when needed, and installs bash/zsh completion. It does not modify the VM
-and does not need root.
+The `cli` step is host-only: it links `aibox` into `~/.local/bin`, adds it to
+`PATH` only when the command cannot be found already, and installs bash/zsh
+completion. It does not modify the VM and does not need root.
 
 The `motd` step installs the login banner in the VM. It shows the services it
 knows about with a coloured dot: green when the service answers on its port,
