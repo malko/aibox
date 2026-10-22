@@ -370,6 +370,7 @@ AIBOX_TERMINAL=xdg-terminal-exec ./aibox web
 ./aibox update scripts            # Upload the latest scripts to the VM
 ./aibox update os                 # apt update + dist-upgrade (interactive)
 ./aibox update os -y              # Same, non-interactive
+./aibox update opencode dsh       # Several targets in one run (in the given order)
 ./aibox update opencode           # Update opencode (opencode update) + restart server
 ./aibox update dsh                # Update dsh + restart dsh-web
 ./aibox update claude             # Update Claude Code
@@ -379,8 +380,9 @@ AIBOX_TERMINAL=xdg-terminal-exec ./aibox web
 ./aibox self-update               # Pull the aibox repo and push scripts to the VM
 ```
 
-`all` stops at the first failure. `opencode-service` is excluded (it only
-reinstalls the opencode service).
+`all` stops at the first failure. The same applies when several targets are
+given; duplicates are ignored. `opencode-service` is excluded from `all` (it
+only reinstalls the opencode service).
 
 ## Setup Process
 

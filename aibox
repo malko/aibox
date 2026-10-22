@@ -30,7 +30,7 @@ usage() {
     echo "  web [--port N] [--no-open]        Launch the local web interface"
     echo "  config get|set|list               Read or update aibox.conf"
     echo "  setup [step ...]                  Run setup steps (see 'aibox setup --help')"
-    echo "  update <target>                   Update (opencode, opencode-service, dsh, claude, os, scripts, vscode-server, all)"
+    echo "  update <target> [<target> ...]   Update one or more targets (opencode, opencode-service, dsh, claude, os, scripts, vscode-server, all)"
     echo "  check-updates                     Check for available updates (host + VM)"
     echo "  self-update                       Pull the aibox repo and push scripts to the VM"
     echo "  shutdown [-f]                     Stop tunnel + shutdown VM (use -f to force)"
@@ -55,6 +55,7 @@ usage() {
     echo "  aibox help service-add               Show help for service-add"
     echo "  aibox setup motd                     Reconfigure the MOTD only"
     echo "  aibox update opencode                Update and restart opencode"
+    echo "  aibox update opencode dsh            Update two components in one run"
     echo "  aibox update scripts                 Upload scripts to VM"
     echo "  aibox shutdown                       Gracefully shutdown VM"
     echo "  aibox restart                        Restart VM"
@@ -207,7 +208,7 @@ commands=(
   'web:launch the local web interface'
   'config:read or update aibox.conf'
   'setup:run setup steps'
-  'update:update service or app (opencode, opencode-service, dsh, claude, os, scripts, vscode-server, all)'
+  'update:update one or more services or apps (opencode, opencode-service, dsh, claude, os, scripts, vscode-server, all)'
   'check-updates:check for available updates (host + VM)'
   'self-update:pull the aibox repo and push scripts to the VM'
   'shutdown:shutdown VM'
@@ -643,14 +644,7 @@ case "$1" in
         exit $?
         ;;
     update)
-        TARGET="$2"
-        if [[ -z "$TARGET" ]]; then
-            echo "Usage: aibox update <target> [options]"
-            echo "Targets: opencode, opencode-service, dsh, claude, os, scripts, vscode-server, all"
-            echo "Options: -y, --yes    Non-interactive system upgrade (os/all)"
-            exit 1
-        fi
-        "$CMD_DIR/update-target" "$TARGET" "$VM_NAME" "$GUEST_USER" "${@:3}"
+        "$CMD_DIR/update-target" --vm "$VM_NAME" --user "$GUEST_USER" "${@:2}"
         exit $?
         ;;
     check-updates)

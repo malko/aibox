@@ -2,9 +2,9 @@
 set -e
 
 usage_update() {
-    echo "Usage: aibox update <target> [options]"
+    echo "Usage: aibox update <target> [<target> ...] [options]"
     echo ""
-    echo "Update a component inside the VM (or the aibox scripts on the VM)."
+    echo "Update one or more components inside the VM (or the aibox scripts on the VM)."
     echo ""
     echo "Targets:"
     echo "  scripts            Re-upload the aibox scripts to the VM"
@@ -16,13 +16,16 @@ usage_update() {
     echo "  os                 Update the VM OS packages"
     echo "  all                Run scripts, os, opencode, dsh, claude, vscode-server"
     echo ""
+    echo "Several targets can be given: they run in the order listed, duplicates"
+    echo "are ignored and the update stops at the first failure."
+    echo ""
     echo "Options:"
     echo "  -y, --yes          Non-interactive system upgrade (os/all)"
     echo "  -h, --help         Show this help"
     echo ""
     echo "Examples:"
-    echo "  aibox update opencode"
-    echo "  aibox update scripts"
+    echo "  aibox update opencode dsh"
+    echo "  aibox update scripts os -y"
     echo "  aibox update all -y"
 }
 
@@ -44,12 +47,92 @@ if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
 fi
 
-TARGET="$1"
-VM_NAME=${2:-$(get_config "VM_NAME" "aibox")}
-GUEST_USER=${3:-$(get_config "GUEST_USER" "aibox")}
-EXTRA_ARGS=("${@:4}")
+# Internal options used by the 'aibox' dispatcher, plus the public ones.
+# Anything else starting with '-' is forwarded to the guest update script
+# (for example the arguments accepted by 'opencode-service').
+TARGETS=()
+EXTRA_ARGS=()
+VM_NAME=""
+GUEST_USER=""
 
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage_update
+            exit 0
+            ;;
+        --vm)
+            if [[ -z "${2:-}" ]]; then
+                echo "Error: --vm requires a VM name" >&2
+                exit 1
+            fi
+            VM_NAME="$2"
+            shift 2
+            ;;
+        --user)
+            if [[ -z "${2:-}" ]]; then
+                echo "Error: --user requires a user name" >&2
+                exit 1
+            fi
+            GUEST_USER="$2"
+            shift 2
+            ;;
+        -*)
+            EXTRA_ARGS+=("$1")
+            shift
+            ;;
+        *)
+            TARGETS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+VM_NAME=${VM_NAME:-$(get_config "VM_NAME" "aibox")}
+GUEST_USER=${GUEST_USER:-$(get_config "GUEST_USER" "aibox")}
 LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
+
+ALL_TARGETS=(scripts os opencode opencode-service dsh claude vscode-server)
+ALL_EXPANSION=(scripts os opencode dsh claude vscode-server)
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+    echo "Missing target"
+    echo "Targets: ${ALL_TARGETS[*]}, all"
+    exit 1
+fi
+
+is_valid_target() {
+    local candidate="$1" known
+    for known in "${ALL_TARGETS[@]}"; do
+        if [[ "$candidate" == "$known" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Expand 'all' and drop duplicates while keeping the requested order.
+RUN_TARGETS=()
+declare -A SEEN_TARGETS=()
+for target in "${TARGETS[@]}"; do
+    if [[ "$target" == "all" ]]; then
+        candidates=("${ALL_EXPANSION[@]}")
+    else
+        candidates=("$target")
+    fi
+
+    for candidate in "${candidates[@]}"; do
+        if ! is_valid_target "$candidate"; then
+            echo "Unknown target: $candidate" >&2
+            echo "Available targets: ${ALL_TARGETS[*]}, all" >&2
+            exit 1
+        fi
+        if [[ -z "${SEEN_TARGETS[$candidate]:-}" ]]; then
+            SEEN_TARGETS[$candidate]=1
+            RUN_TARGETS+=("$candidate")
+        fi
+    done
+done
 
 # The web job runner feeds the guest sudo password on stdin, in memory only.
 # An interactive CLI has no piped stdin and keeps the usual sudo prompt.
@@ -65,13 +148,14 @@ if [[ -z "$GUEST_IP" ]]; then
     exit 1
 fi
 
-if [[ -z $TARGET ]]; then
-    echo "Missing target"
-    exit 1
-fi
-
 run_target() {
     local target="$1"
+    local remote_extra=""
+    local arg
+
+    for arg in "${EXTRA_ARGS[@]}"; do
+        remote_extra+=" $(printf '%q' "$arg")"
+    done
 
     if [[ "$target" == "scripts" ]]; then
         echo "Updating scripts on VM..."
@@ -96,22 +180,22 @@ run_target() {
     if [[ "$target" == "os" && -n "$SUDO_PASSWORD" ]]; then
         printf '%s\n' "$SUDO_PASSWORD" | \
             ssh -T -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" \
-                'IFS= read -r SUDO_PASSWORD; . "$HOME/scripts/update-target.sh" os '"${EXTRA_ARGS[*]}"
+                "IFS= read -r SUDO_PASSWORD; . \"\$HOME/scripts/update-target.sh\" os${remote_extra}"
     else
         ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" \
-            '"$HOME/scripts/update-target.sh" '"$target ${EXTRA_ARGS[*]}"
+            "\"\$HOME/scripts/update-target.sh\" $(printf '%q' "$target")${remote_extra}"
     fi
 }
 
-if [[ "$TARGET" == "all" ]]; then
-    for target in scripts os opencode dsh claude vscode-server; do
+for target in "${RUN_TARGETS[@]}"; do
+    if [[ ${#RUN_TARGETS[@]} -gt 1 ]]; then
         echo ""
         echo "=== Updating: $target ==="
-        run_target "$target" || { echo "Update failed: $target" >&2; exit 1; }
-    done
+    fi
+    run_target "$target" || { echo "Update failed: $target" >&2; exit 1; }
+done
+
+if [[ ${#RUN_TARGETS[@]} -gt 1 ]]; then
     echo ""
     echo "All updates completed."
-    exit 0
 fi
-
-run_target "$TARGET"
