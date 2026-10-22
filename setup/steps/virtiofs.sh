@@ -12,6 +12,13 @@ step_virtiofs() {
     fi
 
     HOST_SHARE_DIR=$(prompt_config "HOST_SHARE_DIR" "Host directory to share" "$HOME/git")
+    # Keep an absolute path in the config: a literal '~' would break the
+    # comparison with the share in the other commands.
+    HOST_SHARE_DIR=$(aibox_expand_tilde "$HOST_SHARE_DIR")
+    [[ "$HOST_SHARE_DIR" == /* ]] || HOST_SHARE_DIR="$PWD/$HOST_SHARE_DIR"
+    if [[ -d "$HOST_SHARE_DIR" ]]; then
+        HOST_SHARE_DIR=$(cd -- "$HOST_SHARE_DIR" && pwd -P)
+    fi
     save_config "HOST_SHARE_DIR" "$HOST_SHARE_DIR"
 
     "$SCRIPT_DIR/host/configure-virtiofs-host.sh" "$VM_NAME" "$HOST_SHARE_DIR"

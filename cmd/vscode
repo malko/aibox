@@ -1,5 +1,5 @@
 #!/bin/bash
-# aibox vscode [directory]
+# aibox vscode [--guest-path <path>] [directory]
 #
 # Open the local VS Code on a directory inside the VM over SSH (Remote-SSH).
 # The VM IP is resolved on the fly, so nothing has to be kept in ~/.ssh/config.
@@ -7,24 +7,23 @@
 set -e
 
 usage_vscode() {
-    echo "Usage: aibox vscode [directory]"
+    echo "Usage: aibox vscode [--guest-path <path>] [directory]"
     echo ""
     echo "Open the local VS Code on a directory inside the VM over SSH."
     echo "With no argument, the current directory is used. The directory must be"
     echo "inside the host share (HOST_SHARE_DIR, ~/git by default)."
     echo ""
     echo "Options:"
-    echo "  -h, --help      Show this help"
+    echo "  --guest-path <path>  Open a path inside the VM instead of a shared one"
+    echo "                       ('~' is the guest home, a relative path is"
+    echo "                       relative to the shared directory)"
+    echo "  -h, --help           Show this help"
     echo ""
     echo "Examples:"
     echo "  aibox vscode"
     echo "  aibox vscode ~/git/my-project"
+    echo "  aibox vscode --guest-path /var/log"
 }
-
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-    usage_vscode
-    exit 0
-fi
 
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
@@ -40,6 +39,57 @@ source "$SCRIPT_DIR/host/vm.sh"
 VM_NAME=$(get_config "VM_NAME" "aibox")
 GUEST_USER=$(get_config "GUEST_USER" "aibox")
 
+GUEST_PATH=""
+TARGET=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --guest-path)
+            if [[ $# -lt 2 ]]; then
+                print_error "--guest-path needs a path."
+                usage_vscode >&2
+                exit 2
+            fi
+            GUEST_PATH="$2"
+            shift 2
+            ;;
+        --guest-path=*)
+            GUEST_PATH="${1#*=}"
+            shift
+            ;;
+        -h|--help)
+            usage_vscode
+            exit 0
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            print_error "Unknown option: $1"
+            usage_vscode >&2
+            exit 2
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+if [[ $# -gt 1 ]]; then
+    print_error "Too many arguments, only one directory can be given."
+    usage_vscode >&2
+    exit 2
+fi
+if [[ $# -eq 1 ]]; then
+    TARGET="$1"
+fi
+if [[ -n "$GUEST_PATH" && -n "$TARGET" ]]; then
+    print_error "A directory and --guest-path cannot be given together."
+    usage_vscode >&2
+    exit 2
+fi
+
 if ! command -v code &>/dev/null; then
     print_error "The 'code' CLI was not found."
     print_info "In VS Code, run: 'Shell Command: Install code command in PATH'."
@@ -47,12 +97,100 @@ if ! command -v code &>/dev/null; then
     exit 1
 fi
 
-# Target directory: argument or current directory, made absolute.
-DIR="${1:-$PWD}"
-[[ "$DIR" == /* ]] || DIR="$PWD/$DIR"
-
 # Host directory shared with the VM (virtiofs), and its guest mount point.
 HOST_SHARE_DIR=$(get_config "HOST_SHARE_DIR" "$HOME/git")
+HOST_SHARE_DIR=$(aibox_expand_tilde "$HOST_SHARE_DIR")
+if [[ ! -d "$HOST_SHARE_DIR" ]]; then
+    print_error "The shared directory '$HOST_SHARE_DIR' does not exist."
+    exit 1
+fi
+SHARE_DIR=$(cd -- "$HOST_SHARE_DIR" && pwd -P)
+
+# Guest paths: Lima mounts the share under /home/<user>.linux.
+if is_macos; then
+    GUEST_HOME="/home/${GUEST_USER}.linux"
+else
+    GUEST_HOME="/home/$GUEST_USER"
+fi
+GUEST_SHARE="$GUEST_HOME/git"
+
+# Map a host path of the shared directory to its path inside the VM.
+# Prints the guest path and returns 0, returns 1 when the path does not
+# exist and 2 when it is outside the shared directory.
+map_to_guest() {
+    local path="$1"
+    local real
+
+    path=$(aibox_expand_tilde "$path")
+    if ! real=$(aibox_real_path "$path"); then
+        return 1
+    fi
+
+    if [[ "$real" == "$SHARE_DIR" ]]; then
+        printf '%s\n' "$GUEST_SHARE"
+        return 0
+    fi
+    if [[ "$real" == "$SHARE_DIR/"* ]]; then
+        printf '%s/%s\n' "$GUEST_SHARE" "${real#"$SHARE_DIR"/}"
+        return 0
+    fi
+    return 2
+}
+
+report_outside_share() {
+    local path="$1"
+    print_error "'$path' is not inside the shared directory '$SHARE_DIR'."
+    print_info "Only paths under '$SHARE_DIR' are shared (mounted at '$GUEST_SHARE' in the VM)."
+    print_info "Use 'aibox vscode --guest-path <path>' to open a path inside the VM."
+}
+
+GUEST_DIR=""
+RC=0
+
+if [[ -n "$GUEST_PATH" ]]; then
+    # A path inside the VM, outside of the shared directory.
+    case "$GUEST_PATH" in
+        "~")   GUEST_DIR="$GUEST_HOME" ;;
+        "~/"*) GUEST_DIR="$GUEST_HOME/${GUEST_PATH#\~/}" ;;
+        /*)    GUEST_DIR="$GUEST_PATH" ;;
+        *)     GUEST_DIR="$GUEST_SHARE/$GUEST_PATH" ;;
+    esac
+elif [[ -n "$TARGET" ]]; then
+    GUEST_DIR=$(map_to_guest "$TARGET") || RC=$?
+    if [[ "$RC" -eq 1 ]]; then
+        print_error "'$TARGET' does not exist."
+        exit 1
+    elif [[ "$RC" -eq 2 ]]; then
+        report_outside_share "$TARGET"
+        exit 1
+    fi
+else
+    # No argument: the current directory, when it is inside the share.
+    GUEST_DIR=$(map_to_guest "$PWD") || RC=$?
+    if [[ "$RC" -ne 0 ]]; then
+        print_error "The current directory '$PWD' is not inside the shared directory '$SHARE_DIR'."
+        print_info "Only paths under '$SHARE_DIR' are shared (mounted at '$GUEST_SHARE' in the VM)."
+        if [[ ! -t 0 ]]; then
+            print_info "Run interactively to enter a target path, or pass a shared directory."
+            print_info "Use 'aibox vscode --guest-path <path>' to open a path inside the VM."
+            exit 1
+        fi
+        TARGET=$(prompt "Directory to open in the share (empty to quit)" "")
+        if [[ -z "$TARGET" ]]; then
+            print_info "Cancelled."
+            exit 0
+        fi
+        RC=0
+        GUEST_DIR=$(map_to_guest "$TARGET") || RC=$?
+        if [[ "$RC" -eq 1 ]]; then
+            print_error "'$TARGET' does not exist."
+            exit 1
+        elif [[ "$RC" -eq 2 ]]; then
+            report_outside_share "$TARGET"
+            exit 1
+        fi
+    fi
+fi
 
 if [[ "$(vm_state "$VM_NAME")" != "running" ]]; then
     print_error "VM '$VM_NAME' is not running. Start it with 'aibox start'."
@@ -70,37 +208,14 @@ AUTHORITY="$VM_SSH_TARGET"
 vm_ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=5 \
     -- true &>/dev/null || true
 
-# Guest paths: Lima mounts the share under /home/<user>.linux.
-if is_macos; then
-    GUEST_HOME="/home/${GUEST_USER}.linux"
-else
-    GUEST_HOME="/home/$GUEST_USER"
-fi
-GUEST_SHARE="$GUEST_HOME/git"
-
-# Map the requested directory into the guest when it lives in the shared dir.
-if [[ "$DIR/" == "$HOST_SHARE_DIR/"* ]]; then
-    REL="${DIR#"$HOST_SHARE_DIR"/}"
-    GUEST_DIR="$GUEST_SHARE/$REL"
-else
-    print_error "'$DIR' is not inside the shared directory '$HOST_SHARE_DIR'."
-    print_info "Only paths under '$HOST_SHARE_DIR' are shared (mounted at '$GUEST_SHARE' in the VM)."
-    if [[ ! -t 0 ]]; then
-        print_info "Run interactively to enter a target path, or pass a shared directory."
+# A guest path must exist in the VM, otherwise VS Code opens an empty window.
+if [[ -n "$GUEST_PATH" ]]; then
+    GUEST_DIR_QUOTED=$(printf "'%s'" "${GUEST_DIR//\'/\'\\\'\'}")
+    if ! vm_ssh -- "test -e $GUEST_DIR_QUOTED" &>/dev/null; then
+        print_error "'$GUEST_DIR' does not exist in the VM."
         exit 1
     fi
-    GUEST_DIR=$(prompt "Guest path in the VM to open (empty to quit)" "")
-    if [[ -z "$GUEST_DIR" ]]; then
-        print_info "Cancelled."
-        exit 0
-    fi
-    case "$GUEST_DIR" in
-        "~")   GUEST_DIR="$GUEST_HOME" ;;
-        "~/"*) GUEST_DIR="$GUEST_HOME/${GUEST_DIR#\~/}" ;;
-        /*)    ;;
-        *)     GUEST_DIR="$GUEST_SHARE/$GUEST_DIR" ;;
-    esac
 fi
 
 print_info "Opening VS Code on $AUTHORITY:$GUEST_DIR"
-exec code --remote "ssh-remote+$AUTHORITY" "$GUEST_DIR/"
+exec code --remote "ssh-remote+$AUTHORITY" "$GUEST_DIR"

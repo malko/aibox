@@ -139,6 +139,43 @@ aibox_status_text() {
     esac
 }
 
+# aibox_expand_tilde <path>
+#   Expands a leading '~' to the home directory. Any other path is returned
+#   unchanged, so it stays safe to use as a pattern.
+aibox_expand_tilde() {
+    local path="$1"
+    # shellcheck disable=SC2088  # the tilde is matched literally, not expanded
+    case "$path" in
+        "~")   printf '%s\n' "$HOME" ;;
+        "~/"*) printf '%s\n' "$HOME/${path#\~/}" ;;
+        *)     printf '%s\n' "$path" ;;
+    esac
+}
+
+# aibox_real_path <path>
+#   Physical path of an existing file or directory, with the symlinks
+#   resolved like the filesystem does. Returns 1 when the path does not
+#   exist. A symlinked file keeps its name, only its parent directory is
+#   resolved.
+aibox_real_path() {
+    local path="$1"
+    local dir base
+
+    if [[ ! -e "$path" ]]; then
+        return 1
+    fi
+
+    if [[ -d "$path" ]]; then
+        (cd -- "$path" && pwd -P) || return 1
+        return 0
+    fi
+
+    dir="$(dirname -- "$path")"
+    base="$(basename -- "$path")"
+    [[ -d "$dir" ]] || return 1
+    printf '%s/%s\n' "$(cd -- "$dir" && pwd -P)" "$base"
+}
+
 prompt() {
     local prompt_text="$1"
     local default="$2"

@@ -478,7 +478,7 @@ _aibox() {
             ;;
         vscode)
             if [[ "$cur" == -* ]]; then
-                COMPREPLY=($(compgen -W "-h --help" -- "$cur"))
+                COMPREPLY=($(compgen -W "-h --help --guest-path" -- "$cur"))
             else
                 COMPREPLY=($(compgen -d -- "$cur"))
             fi

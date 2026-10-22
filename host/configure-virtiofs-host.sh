@@ -13,6 +13,9 @@ LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 
 VM_NAME="${1:-aibox}"
 HOST_SHARE_DIR="${2:-$HOME/git}"
+# A literal '~' would create a directory named '~' instead of the home one.
+HOST_SHARE_DIR=$(aibox_expand_tilde "$HOST_SHARE_DIR")
+[[ "$HOST_SHARE_DIR" == /* ]] || HOST_SHARE_DIR="$PWD/$HOST_SHARE_DIR"
 
 print_info "=== Configure Virtiofs (Host) ==="
 

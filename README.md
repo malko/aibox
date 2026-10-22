@@ -282,8 +282,9 @@ immediately with a non-zero status.
 Use your local VS Code on the VM over SSH, without keeping a session open:
 
 ```bash
-./aibox vscode                 # Open the shared ~/git directory in the VM
+./aibox vscode                 # Open the current directory when it is shared
 ./aibox vscode ~/git/aibox     # Open a specific directory from the share
+./aibox vscode --guest-path /var/log   # Open a path inside the VM
 ```
 
 `aibox vscode` resolves the VM address on the fly and runs
@@ -294,11 +295,17 @@ extension. The VS Code Server is installed automatically inside the VM on
 first connection.
 
 Notes:
-- Only directories under the shared host directory (`HOST_SHARE_DIR`, default
-  `~/git`) are mapped automatically. For any other path, aibox shows an error
-  and asks for the target path inside the VM (or lets you quit). The typed path
-  may be absolute (`/var/log`), start with `~` (`~/git/repo`) or be relative to
-  the shared directory (`repo`).
+- Only paths under the shared host directory (`HOST_SHARE_DIR`, default
+  `~/git`) are mapped automatically: the host path is resolved (symlinks
+  included) and turned into its path in the VM, where the share is mounted.
+  A path outside of it is refused, with `--guest-path` as the way to open a
+  path that only exists in the VM.
+- With no argument, the current directory is used when it is inside the
+  share. Otherwise aibox shows an error and asks for a directory to open
+  (or lets you quit).
+- `--guest-path` opens a path inside the VM: an absolute path (`/var/log`),
+  a path starting with `~` (`~/git/repo`) or a path relative to the shared
+  directory (`repo`). The path must exist in the VM.
 - The host key is accepted automatically (no fingerprint prompt).
 - On macOS/Lima the Reachable address is the Lima instance (`lima-<name>`);
   add `Include ~/.lima/*/ssh.config` to `~/.ssh/config` once.
