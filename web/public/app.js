@@ -11,6 +11,7 @@ const state = {
   updates: null,
   setup: null,
   snapshots: null,
+  units: null,
   activeJob: null,
   jobTimer: null,
   jobLogEl: null,
@@ -22,6 +23,7 @@ const state = {
   busy: false,
   sessionId: "",
   footerStatusKey: "status.connecting",
+  lastStatusKey: "",
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -63,6 +65,14 @@ const STATE_LABELS = {
     missing: "state.setup.missing",
     unknown: "state.setup.unknown",
     disabled: "state.setup.disabled",
+  },
+  unit: {
+    running: "state.unit.running",
+    stopped: "state.unit.stopped",
+    failed: "state.unit.failed",
+    starting: "state.unit.starting",
+    stopping: "state.unit.stopping",
+    unknown: "state.unit.unknown",
   },
 };
 
@@ -133,6 +143,7 @@ const API_ERROR_KEYS = {
   "invalid setup step": "error.api.setupStep",
   "invalid timeout": "error.api.timeout",
   "invalid tunnel action": "error.api.tunnelAction",
+  "invalid unit name": "error.api.invalidUnitName",
   "invalid update target": "error.api.updateTarget",
   "invalid VM action": "error.api.vmAction",
   "the VM does not exist": "error.api.vmMissing",
@@ -147,6 +158,8 @@ const API_ERROR_KEYS = {
   "targets must be an array": "error.api.targetsArray",
   "the VM must be running for this setup step": "error.api.vmRequired",
   "the VM must be shut down to create a snapshot": "error.api.snapshotNeedsShutdown",
+  "the VM is not running": "error.api.vmNotRunning",
+  "could not detect the guest IP": "error.api.guestIp",
   "this setup step is not available from the web UI": "error.api.stepUnavailable",
   "unknown route": "error.api.unknownRoute",
   "web PID file not found": "error.api.webPidMissing",
@@ -158,6 +171,8 @@ const API_ERROR_PREFIX_KEYS = {
   "another operation is running (": "error.api.busyDetail",
   "expected ": "error.api.methodDetail",
   "invalid update target: ": "error.api.updateTargetDetail",
+  "unit not found: ": "error.api.unitNotInstalledDetail",
+  "Unit not installed: ": "error.api.unitNotInstalledDetail",
 };
 
 function translateApiError(message) {
@@ -281,9 +296,10 @@ function closeDialog() {
   state.jobDialogKillBtn = null;
 }
 
-function openDialog({ title, body, actions = [] }) {
+function openDialog({ title, body, actions = [], className = "" }) {
   const dialog = $("#dialog");
   if (dialog.open) dialog.close();
+  dialog.className = className ? `dialog ${className}` : "dialog";
 
   $("#dialog-title").textContent = title;
   const bodyEl = $("#dialog-body");
@@ -337,6 +353,18 @@ function promptSudoPassword({
       if (dialog.open) dialog.close();
       resolve(value);
     };
+    const submit = () => {
+      if (!input.value) {
+        toast(t("sudo.required"), true);
+        return;
+      }
+      finish(input.value);
+    };
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      submit();
+    });
     const body = el("div", {},
       el("p", { className: "hint", text: message }),
       field(t("sudo.field"), input),
@@ -350,16 +378,11 @@ function promptSudoPassword({
         {
           label: confirmLabel,
           className: "btn-primary",
-          onClick: () => {
-            if (!input.value) {
-              toast(t("sudo.required"), true);
-              return;
-            }
-            finish(input.value);
-          },
+          onClick: submit,
         },
       ],
     });
+    input.focus();
     dialog.addEventListener("close", () => finish(null), { once: true });
   });
 }
@@ -425,10 +448,17 @@ async function loadStatus({ quiet = false } = {}) {
   if (state.quitting) return;
   try {
     const data = await api("status");
+    const previousKey = state.lastStatusKey;
+    state.lastStatusKey = statusRefreshKey(data);
     state.status = data;
     state.lastError = "";
     setFooterStatus("status.connected");
     renderStatus(data);
+    if (previousKey && previousKey !== state.lastStatusKey) {
+      // The VM or the tunnel changed: views loaded in the background are now
+      // stale. Refresh them without waiting for a manual refresh on each tab.
+      void refreshViewsAfterStatusChange();
+    }
   } catch (error) {
     setFooterStatus("status.offline");
     if (!quiet || state.lastError !== error.message) {
@@ -436,6 +466,33 @@ async function loadStatus({ quiet = false } = {}) {
     }
     state.lastError = error.message;
   }
+}
+
+/* Only the fields that make the other tabs stale. Service availability is
+   already rendered from the status payload itself. */
+function statusRefreshKey(data) {
+  const vm = data.vm || {};
+  const tunnel = data.tunnel || {};
+  return [
+    vm.running ? "running" : "stopped",
+    vm.state || "",
+    vm.ip || "",
+    tunnel.installed ? "installed" : "missing",
+    tunnel.active ? "active" : "inactive",
+    tunnel.status || "",
+  ].join("|");
+}
+
+function refreshViewsAfterStatusChange() {
+  const activeTab = $(".tab.active")?.dataset.tab || "";
+  const tasks = [];
+
+  if (state.updates || activeTab === "updates") tasks.push(loadUpdates({ quiet: true }));
+  if (state.setup || activeTab === "setup") tasks.push(loadSetup({ quiet: true }));
+  if (state.units || activeTab === "services") tasks.push(loadUnits({ quiet: true }));
+  if (state.snapshots || activeTab === "snapshots") tasks.push(loadSnapshots({ quiet: true }));
+
+  return Promise.allSettled(tasks);
 }
 
 function renderStatus(data) {
@@ -492,16 +549,23 @@ function renderStatus(data) {
   syncUpdateControls();
 }
 
-function statusPill(mode) {
-  if (mode === "permanent") return el("span", { className: "pill lan", text: t("lan.permanent") });
-  if (mode === "temporary") return el("span", { className: "pill lan", text: t("lan.temporary") });
+function statusPill(service) {
+  const available = serviceState(service).tone === "ok";
+  if (service.lan === "permanent") {
+    return el("span", { className: `pill${available ? " lan-permanent" : ""}`, text: t("lan.permanent") });
+  }
+  if (service.lan === "temporary") {
+    return el("span", { className: `pill${available ? " lan" : ""}`, text: t("lan.temporary") });
+  }
   return el("span", { className: "pill", text: t("common.localhost") });
 }
 
 /* Availability of a service, from the guest port probe done by the API.
    - up: the port is listening in the VM and the tunnel forwards it;
    - down: the port is closed in the VM (the tunnel is up);
-   - unknown: the VM is off, the tunnel is down or the check failed. */
+   - unknown: the VM is off, the tunnel is down or the check failed.
+   Anything but "up" is displayed in grey: a service that cannot answer must
+   not look available through its colour. */
 function serviceState(service) {
   const tunnelActive = Boolean(state.status?.tunnel?.active);
   const open = service.port_open;
@@ -518,7 +582,7 @@ function serviceState(service) {
 /* The availability dot prepended to the service name. */
 function serviceStateDot(service) {
   const info = serviceState(service);
-  const tone = info.tone ? ` ${info.tone}` : "";
+  const tone = info.tone === "ok" ? " ok" : "";
   return el("span", { className: `status-dot${tone}`, title: info.label });
 }
 
@@ -529,16 +593,28 @@ function serviceNameCell(service) {
   );
 }
 
+function serviceRowClass(service) {
+  return serviceState(service).tone === "ok" ? "" : "unavailable";
+}
+
 function serviceUrlLink(service, target) {
   const url = target === "lan" ? service.url_lan : service.url_local;
   if (!url) return el("span", { className: "muted", text: "—" });
 
-  // A service that is known to be down gets a red link: the URL is listed
-  // but it will not answer.
-  const down = serviceState(service).tone === "bad";
+  // An unavailable service stays grey, whatever its exposure and URL colour.
+  // LAN temporary is orange and LAN permanent red only when it can answer.
+  const available = serviceState(service).tone === "ok";
+  let className = "url-link";
+  if (!available) {
+    className += " unavailable";
+  } else if (target === "lan") {
+    className += service.lan === "permanent" ? " lan-permanent" : " lan";
+  } else {
+    className += " local";
+  }
 
   const link = el("a", {
-    className: `url-link ${target}${down ? " down" : ""}`,
+    className,
     href: url,
     target: "_blank",
     rel: "noopener",
@@ -574,7 +650,7 @@ function serviceActions(service) {
   actions.append(edit);
 
   if (service.lan !== "local") {
-    const toggle = el("label", { className: "lan-toggle", title: t("lan.disableTitle") });
+    const toggle = el("label", { className: `lan-toggle ${service.lan}`, title: t("lan.disableTitle") });
     const checkbox = el("input", { type: "checkbox", checked: true });
     checkbox.addEventListener("change", async () => {
       if (checkbox.checked) return;
@@ -600,10 +676,10 @@ function renderOverviewServices(services) {
 
   for (const service of services) {
     body.append(
-      el("tr", {},
+      el("tr", { className: serviceRowClass(service) },
         serviceNameCell(service),
         el("td", { className: "mono muted", text: service.port }),
-        el("td", {}, statusPill(service.lan)),
+        el("td", {}, statusPill(service)),
         el("td", {}, serviceUrlLink(service, "local")),
         el("td", {}, serviceUrlLink(service, "lan")),
       ),
@@ -622,15 +698,268 @@ function renderServices(services) {
 
   for (const service of services) {
     body.append(
-      el("tr", {},
+      el("tr", { className: serviceRowClass(service) },
         serviceNameCell(service),
         el("td", { className: "mono", text: service.port }),
-        el("td", {}, statusPill(service.lan)),
+        el("td", {}, statusPill(service)),
         el("td", {}, serviceUrlLink(service, "local")),
         el("td", {}, serviceUrlLink(service, "lan")),
         el("td", { className: "actions-cell" }, serviceActions(service)),
       ),
     );
+  }
+}
+
+/* System services (systemd units and the vscode-server container) ---------- */
+
+function unitTone(stateName) {
+  if (stateName === "running") return "ok";
+  if (stateName === "failed") return "bad";
+  if (stateName === "stopped" || stateName === "starting" || stateName === "stopping") return "warn";
+  return "";
+}
+
+function renderUnits(units, message = null) {
+  const panel = $("#unit-panel");
+  const body = $("#units-body");
+  body.replaceChildren();
+  panel.hidden = false;
+
+  const list = Array.isArray(units) ? units : [];
+  if (list.length === 0) {
+    $("#units-count").textContent = message ? "—" : t("units.count", { count: 0 });
+    const emptyText = message || (state.status?.vm?.running ? t("units.empty") : t("units.vmStopped"));
+    body.append(el("tr", {}, el("td", { className: "empty", colspan: "4", text: emptyText })));
+    return;
+  }
+
+  $("#units-count").textContent = t("units.count", { count: list.length });
+
+  for (const unit of list) {
+    const tone = unitTone(unit.state);
+    const since = unit.state === "running" ? formatEpoch(unit.since) : "—";
+
+    const nameCell = el("td", { className: "name" },
+      el("span", { className: `status-dot${tone ? ` ${tone}` : ""}` }),
+      el("span", { text: unit.label }),
+      el("span", { className: "mono muted unit-file", text: unit.unit }),
+    );
+
+    const statusCell = el("td", {},
+      el("span", { className: `pill${tone ? ` ${tone}` : ""}`, text: stateLabel("unit", unit.state) }),
+      unit.sub_state && unit.sub_state !== unit.state ? el("span", { className: "mono muted unit-sub", text: unit.sub_state }) : null,
+      unit.enabled ? el("span", { className: "mono muted unit-enabled", text: unit.enabled }) : null,
+    );
+
+    const actions = el("div", { className: "row-actions" });
+
+    const connect = el("button", { className: "btn btn-sm", type: "button", text: t("units.connect") });
+    connect.disabled = unit.state !== "running";
+    if (connect.disabled) connect.title = t("units.connectStopped");
+    connect.addEventListener("click", () => openUnitConnection(unit));
+    actions.append(connect);
+
+    const logs = el("button", { className: "btn btn-sm", type: "button", text: t("units.logs") });
+    logs.addEventListener("click", () => openUnitLogs(unit));
+    actions.append(logs);
+
+    const restart = el("button", { className: "btn btn-sm", type: "button", text: t("common.restart") });
+    restart.addEventListener("click", () => restartUnit(unit));
+    actions.append(restart);
+
+    body.append(
+      el("tr", {},
+        nameCell,
+        statusCell,
+        el("td", { className: "mono muted", text: since }),
+        el("td", { className: "actions-cell" }, actions),
+      ),
+    );
+  }
+}
+
+async function loadUnits({ quiet = false } = {}) {
+  try {
+    const data = await api("units");
+    state.units = Array.isArray(data) ? data : [];
+    renderUnits(state.units);
+  } catch (error) {
+    state.units = [];
+    const vmStopped = Boolean(state.status) && !state.status.vm?.running;
+    renderUnits(state.units, vmStopped ? t("units.vmStopped") : error.message);
+    if (!quiet) toast(error.message, true);
+  }
+}
+
+async function refreshServices() {
+  await Promise.allSettled([loadStatus(), loadUnits()]);
+}
+
+function unitDetailRow(label, content, extra = null) {
+  return el("div", { className: "unit-detail-row" },
+    el("span", { className: "unit-detail-label", text: label }),
+    content,
+    extra,
+  );
+}
+
+/* Tokens embedded in a URL are masked in the text, but the link and the copy
+   button keep the full URL so it can still be used. */
+function redactUrlSecret(url) {
+  return String(url).replace(/([?&](?:token|password|key)=)[^&#]*/gi, "$1••••••");
+}
+
+function unitUrlRow(label, url) {
+  const copy = el("button", { className: "btn btn-sm", type: "button", text: t("common.copy") });
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast(t("open.urlCopied"));
+    } catch {
+      toast(t("units.copyFailed"), true);
+    }
+  });
+
+  return unitDetailRow(
+    label,
+    el("a", { className: "mono url", href: url, target: "_blank", rel: "noopener", text: redactUrlSecret(url) }),
+    copy,
+  );
+}
+
+function unitSecretField(value) {
+  const input = el("input", {
+    className: "input mono",
+    id: "unit-secret",
+    type: "password",
+    value,
+    readonly: "",
+    autocomplete: "off",
+    spellcheck: "false",
+  });
+
+  const toggle = el("button", { className: "btn btn-sm", type: "button", text: t("units.showSecret") });
+  toggle.addEventListener("click", () => {
+    const shown = input.type === "text";
+    input.type = shown ? "password" : "text";
+    toggle.textContent = shown ? t("units.showSecret") : t("units.hideSecret");
+  });
+
+  const copy = el("button", { className: "btn btn-sm", type: "button", text: t("common.copy") });
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast(t("units.secretCopied"));
+    } catch {
+      toast(t("units.copyFailed"), true);
+    }
+  });
+
+  return el("div", { className: "field" },
+    el("label", { for: "unit-secret", text: t("units.secretLabel") }),
+    el("div", { className: "secret-row" }, input, toggle, copy),
+  );
+}
+
+async function openUnitConnection(unit) {
+  try {
+    const details = await api(`units/info?name=${encodeURIComponent(unit.id)}`);
+    const body = el("div");
+
+    let statusLine = t("units.stateLine", { state: stateLabel("unit", details.state) });
+    if (details.since) statusLine += ` · ${t("units.sinceValue", { date: formatEpoch(details.since) })}`;
+    body.append(el("p", { className: "hint", text: statusLine }));
+
+    let urls = 0;
+    if (details.url_local) {
+      body.append(unitUrlRow(t("units.urlLocal"), details.url_local));
+      urls += 1;
+    }
+    if (details.url_lan) {
+      body.append(unitUrlRow(t("units.urlLan"), details.url_lan));
+      urls += 1;
+    }
+
+    if (urls === 0) {
+      body.append(el("p", { className: "hint", text: t("units.notExposed", { port: details.port || "?" }) }));
+      if (details.guest_url) {
+        body.append(unitDetailRow(t("units.guestUrl"), el("span", { className: "mono url", text: redactUrlSecret(details.guest_url) })));
+      }
+    }
+
+    if (details.password) {
+      body.append(unitSecretField(details.password));
+    } else {
+      body.append(el("p", { className: "hint", text: t("units.noSecret") }));
+    }
+
+    openDialog({
+      title: t("units.detailsTitle", { name: unit.label }),
+      body,
+      actions: [{ label: t("common.close"), onClick: closeDialog }],
+    });
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function openUnitLogs(unit) {
+  const pre = el("pre", { text: t("units.logsLoading") });
+  let current = "";
+
+  const loadLogs = async () => {
+    pre.textContent = t("units.logsLoading");
+    try {
+      const data = await api(`units/logs?name=${encodeURIComponent(unit.id)}`);
+      if (!pre.isConnected) return;
+      current = stripAnsi(data.output || "");
+      pre.textContent = current || t("units.logsEmpty");
+      pre.scrollTop = pre.scrollHeight;
+    } catch (error) {
+      if (!pre.isConnected) return;
+      current = "";
+      pre.textContent = error.message;
+    }
+  };
+
+  openDialog({
+    title: t("units.logsTitle", { name: unit.label }),
+    body: pre,
+    className: "dialog-fill",
+    actions: [
+      {
+        label: t("common.copy"),
+        onClick: async () => {
+          if (!current) return;
+          try {
+            await navigator.clipboard.writeText(current);
+            toast(t("units.logsCopied"));
+          } catch {
+            toast(t("units.copyFailed"), true);
+          }
+        },
+      },
+      { label: t("common.refresh"), onClick: loadLogs },
+      { label: t("common.close"), onClick: closeDialog },
+    ],
+  });
+
+  loadLogs();
+}
+
+async function restartUnit(unit) {
+  const confirmed = await confirmDialog(
+    t("units.restartTitle", { name: unit.label }),
+    t("units.restartMessage", { name: unit.unit }),
+    t("common.restart"),
+  );
+  if (!confirmed) return;
+
+  try {
+    const data = await api("units/restart", { method: "POST", body: { name: unit.id } });
+    startJob(data, { reload: "units", title: t("units.restarting", { name: unit.label }) });
+  } catch (error) {
+    toast(error.message, true);
   }
 }
 
@@ -901,11 +1230,51 @@ function syncUpdateControls() {
   $("#self-update").disabled = state.busy;
 }
 
+function availableUpdateCount(data) {
+  if (!data) return 0;
+
+  const repo = data.repo || {};
+  const updates = data.vm?.updates;
+  let count = 0;
+
+  if (repo.is_git && Number(repo.behind) > 0) count += Number(repo.behind);
+  if (updates) {
+    count += Number(updates.apt) || 0;
+    count += String(updates.npm || "")
+      .split(";")
+      .filter((part) => part.trim())
+      .length;
+    if (updates.vscode) count += 1;
+  }
+
+  return count;
+}
+
+function renderUpdatesBadge(data) {
+  const badge = $("#updates-badge");
+  if (!badge) return;
+
+  const count = availableUpdateCount(data);
+  const tab = badge.closest(".tab");
+  if (count > 0) {
+    badge.textContent = count > 99 ? "99+" : String(count);
+    badge.title = t("updates.badgeTitle", { count });
+    badge.hidden = false;
+    tab?.classList.add("has-updates");
+  } else {
+    badge.textContent = "";
+    badge.title = "";
+    badge.hidden = true;
+    tab?.classList.remove("has-updates");
+  }
+}
+
 function renderUpdates(data) {
   const repo = data.repo || {};
   const vm = data.vm || {};
   const updates = vm.updates;
 
+  renderUpdatesBadge(data);
   syncUpdateControls();
 
   if (!repo.is_git) {
@@ -973,7 +1342,11 @@ async function applySelectedUpdates() {
     const body = { targets };
     if (sudoPassword !== null) body.sudo_password = sudoPassword;
     const data = await api("updates/apply", { method: "POST", body });
-    startJob(data, { reload: "updates", title: t("job.updates.apply", { targets: targets.join(", ") }) });
+    startJob(data, {
+      reload: "all",
+      refreshUpdates: true,
+      title: t("job.updates.apply", { targets: targets.join(", ") }),
+    });
   } catch (error) {
     toast(error.message, true);
   }
@@ -989,7 +1362,7 @@ async function selfUpdate() {
   if (!confirmed) return;
   try {
     const data = await api("self-update", { method: "POST" });
-    startJob(data, { reload: "updates", title: t("job.selfUpdate") });
+    startJob(data, { reload: "all", title: t("job.selfUpdate") });
   } catch (error) {
     toast(error.message, true);
   }
@@ -1154,6 +1527,8 @@ function startJob(response, options = {}) {
     id: response.id,
     title: options.title || response.title || t("job.operation"),
     reload: options.reload || "all",
+    refreshUpdates: Boolean(options.refreshUpdates),
+    updatesBaseline: state.updates?.vm?.updates?.timestamp ?? null,
     done: false,
   };
   state.busy = true;
@@ -1210,15 +1585,22 @@ async function pollJob() {
       }), true);
     }
 
-    const reload = state.activeJob.reload;
+    const job = state.activeJob;
+    const reload = job.reload;
     state.activeJob = null;
     state.busy = false;
     syncUpdateControls();
 
     await loadStatus({ quiet: true });
-    if (reload === "updates" || reload === "all") await loadUpdates({ quiet: true });
+    if (reload === "updates" || reload === "all") {
+      await loadUpdates({ quiet: true });
+      if (job.refreshUpdates && data.state === "done" && data.exit === 0) {
+        scheduleUpdatesRefresh(job.updatesBaseline);
+      }
+    }
     if (reload === "setup" || reload === "all") await loadSetup({ quiet: true });
     if (reload === "snapshots" || reload === "all") await loadSnapshots({ quiet: true });
+    if (reload === "units" || reload === "all") await loadUnits({ quiet: true });
   } catch (error) {
     state.activeJob.done = true;
     state.busy = false;
@@ -1227,6 +1609,26 @@ async function pollJob() {
     syncUpdateControls();
     toast(error.message, true);
   }
+}
+
+/* The guest update script refreshes its cached update summary asynchronously
+   after an update. Poll until the cache timestamp changes so the updates tab
+   does not keep showing the pre-update values. */
+function scheduleUpdatesRefresh(baseline) {
+  const baselineValue = baseline ?? null;
+  let attempts = 0;
+
+  const tick = async () => {
+    if (state.quitting) return;
+    attempts += 1;
+    await loadUpdates({ quiet: true });
+
+    const current = state.updates?.vm?.updates?.timestamp ?? null;
+    if (current && (baselineValue === null || current !== baselineValue)) return;
+    if (attempts < 12) setTimeout(tick, 5000);
+  };
+
+  setTimeout(tick, 2000);
 }
 
 async function cancelActiveJob() {
@@ -1256,6 +1658,7 @@ function openJobDialog(job) {
   openDialog({
     title: job.title,
     body: el("div", {}, status, pre),
+    className: "dialog-fill",
     actions: [
       {
         label: t("job.kill"),
@@ -1448,6 +1851,7 @@ function rerenderAll() {
   if (state.updates) renderUpdates(state.updates);
   if (state.setup) renderSetup(state.setup);
   if (state.snapshots) renderSnapshots(state.snapshots);
+  if (state.units) renderUnits(state.units);
   if (state.activeJob) {
     $("#active-job-title").textContent = state.activeJob.title;
   }
@@ -1470,6 +1874,7 @@ function switchTab(name, updateUrl = true) {
   if (name === "updates" && !state.updates) loadUpdates();
   if (name === "setup" && !state.setup) loadSetup();
   if (name === "snapshots" && !state.snapshots) loadSnapshots();
+  if (name === "services") loadUnits({ quiet: true });
 }
 
 function initEvents() {
@@ -1478,7 +1883,8 @@ function initEvents() {
   });
 
   $("#refresh-overview").addEventListener("click", () => loadStatus());
-  $("#refresh-services").addEventListener("click", () => loadStatus());
+  $("#refresh-services").addEventListener("click", refreshServices);
+  $("#refresh-units").addEventListener("click", () => loadUnits());
   $("#refresh-updates").addEventListener("click", () => loadUpdates());
   $("#refresh-setup").addEventListener("click", () => loadSetup());
   $("#refresh-snapshots").addEventListener("click", () => loadSnapshots());
@@ -1590,7 +1996,7 @@ async function init() {
   await registerSession();
   await cancelPendingQuit();
   await loadStatus();
-  await Promise.allSettled([loadUpdates({ quiet: true }), loadSetup({ quiet: true })]);
+  await Promise.allSettled([loadUpdates({ quiet: true }), loadSetup({ quiet: true }), loadUnits({ quiet: true })]);
   switchTab(currentTabFromLocation(), false);
   setInterval(() => {
     if (!document.hidden && !state.quitting) loadStatus({ quiet: true });

@@ -12,4 +12,9 @@ step_vscode() {
     fi
 
     ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "~/scripts/install-vscode.sh"
+
+    source "$SCRIPT_DIR/services-funcs.sh"
+    if ! service_exists vscode-server; then
+        "$SCRIPT_DIR/cmd/service-add" vscode-server 8081
+    fi
 }

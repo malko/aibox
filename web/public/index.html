@@ -26,12 +26,12 @@
   </header>
 
   <nav class="tabs" data-i18n-aria-label="nav.sections" aria-label="Sections">
-    <button class="tab active" data-tab="overview" data-i18n="tab.overview">overview</button>
-    <button class="tab" data-tab="services" data-i18n="tab.services">services</button>
-    <button class="tab" data-tab="updates" data-i18n="tab.updates">updates</button>
-    <button class="tab" data-tab="setup" data-i18n="tab.setup">setup</button>
-    <button class="tab" data-tab="snapshots" data-i18n="tab.snapshots">snapshots</button>
-    <button class="tab" data-tab="settings" data-i18n="tab.settings">settings</button>
+    <button class="tab active" data-tab="overview" data-i18n="tab.overview">Overview</button>
+    <button class="tab" data-tab="services" data-i18n="tab.services">Services</button>
+    <button class="tab" data-tab="updates"><span data-i18n="tab.updates">Updates</span><span class="tab-badge" id="updates-badge" hidden></span></button>
+    <button class="tab" data-tab="setup" data-i18n="tab.setup">Setup</button>
+    <button class="tab" data-tab="snapshots" data-i18n="tab.snapshots">Snapshots</button>
+    <button class="tab" data-tab="settings" data-i18n="tab.settings">Settings</button>
   </nav>
 
   <main>
@@ -124,6 +124,25 @@
           <tbody id="services-body"></tbody>
         </table>
       </div>
+
+      <section class="panel" id="unit-panel">
+        <div class="panel-head">
+          <h2 data-i18n="units.title">system services</h2>
+          <div class="actions">
+            <span class="mono muted" id="units-count">—</span>
+            <button class="btn btn-ghost btn-sm" id="refresh-units" data-i18n="common.refresh">refresh</button>
+          </div>
+        </div>
+        <p class="hint" data-i18n="units.hint">Systemd units and application containers installed inside the VM. Restarting a service interrupts its current sessions.</p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr><th data-i18n="common.service">Service</th><th data-i18n="common.status">Status</th><th data-i18n="units.since">since</th><th class="actions-cell" data-i18n="common.actions">Actions</th></tr>
+            </thead>
+            <tbody id="units-body"></tbody>
+          </table>
+        </div>
+      </section>
     </section>
 
     <section class="tab-panel" id="tab-updates">

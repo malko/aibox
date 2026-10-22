@@ -22,6 +22,32 @@
 
 * { box-sizing: border-box; }
 
+/* Scrollbars: thin and theme-matched (WebKit + Firefox). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -156,9 +182,30 @@ a:hover { text-decoration: underline; }
   font-size: 12px;
   letter-spacing: 0.03em;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .tab:hover { color: var(--text); background: rgba(255, 255, 255, 0.02); }
 .tab.active { color: var(--orange-bright); border-bottom-color: var(--orange-bright); }
+.tab.has-updates { color: var(--orange-bright); }
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--orange-bright);
+  color: #1a0d06;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+.tab-badge[hidden] { display: none; }
 .tab:focus-visible, .btn:focus-visible, .input:focus-visible {
   outline: 2px solid var(--cyan);
   outline-offset: 2px;
@@ -330,7 +377,7 @@ h2 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 
 /* Tables ----------------------------------------------------------------- */
 
-.table-wrap { overflow-x: auto; border: 1px solid var(--border-soft); border-radius: 4px; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--border-soft); border-radius: 4px; margin-bottom: 1.5em; }
 .table { width: 100%; border-collapse: collapse; min-width: 620px; }
 .table th {
   text-align: left;
@@ -361,6 +408,41 @@ h2 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
   vertical-align: middle;
   margin-right: 6px;
 }
+.table .unit-file {
+  margin-left: 8px;
+  font-size: 10px;
+  color: var(--dim);
+}
+.table .unit-sub,
+.table .unit-enabled {
+  margin-left: 6px;
+  font-size: 10px;
+}
+.unit-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.unit-detail-label {
+  min-width: 76px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.unit-detail-row .url { overflow-wrap: anywhere; }
+.secret-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.secret-row .input {
+  flex: 1;
+  min-width: 0;
+}
 .row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .url-link {
   font-family: var(--font-mono);
@@ -369,7 +451,7 @@ h2 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 }
 .url-link.local { color: var(--green); }
 .url-link.lan { color: var(--orange-bright); }
-.url-link.down { color: var(--red); }
+.url-link.lan-permanent { color: var(--red); }
 .url-link:hover { text-decoration: underline; }
 .lan-toggle {
   display: inline-flex;
@@ -384,6 +466,10 @@ h2 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
   text-transform: lowercase;
   cursor: pointer;
   user-select: none;
+}
+.lan-toggle.permanent {
+  color: var(--red);
+  border-color: rgba(248, 113, 113, 0.35);
 }
 .lan-toggle input { accent-color: var(--orange-bright); }
 .empty { color: var(--dim); font-family: var(--font-mono); font-size: 12px; padding: 14px 10px; }
@@ -416,6 +502,23 @@ h2 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
 .pill.warn { color: var(--yellow); border-color: rgba(251, 191, 36, 0.3); }
 .pill.bad { color: var(--red); border-color: rgba(248, 113, 113, 0.3); }
 .pill.lan { color: var(--orange-bright); border-color: rgba(249, 115, 22, 0.35); }
+.pill.lan-permanent { color: var(--red); border-color: rgba(248, 113, 113, 0.35); }
+
+/* A service that cannot answer is greyed out, whatever its exposure mode. */
+.table tr.unavailable td:not(.actions-cell) { color: var(--dim); }
+.table tr.unavailable .url-link,
+.table tr.unavailable .pill {
+  color: var(--dim);
+  border-color: var(--border);
+}
+.table tr.unavailable .status-dot {
+  background: var(--dim);
+  box-shadow: 0 0 0 3px rgba(139, 152, 168, 0.08);
+}
+.table tr.unavailable .lan-toggle {
+  color: var(--dim);
+  border-color: var(--border);
+}
 
 /* Forms ----------------------------------------------------------------- */
 
@@ -538,6 +641,41 @@ h2 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spa
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   max-height: 52vh;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+/* Log/job dialogs: the dialog and its body do not scroll, only the log pane.
+   This avoids stacked scrollbars (dialog + body + pre). */
+.dialog.dialog-fill {
+  height: min(80vh, 720px);
+  overflow: hidden;
+}
+.dialog.dialog-fill .dialog-inner {
+  height: 100%;
+  min-height: 0;
+}
+.dialog.dialog-fill .dialog-head,
+.dialog.dialog-fill .dialog-actions {
+  flex: none;
+}
+.dialog.dialog-fill .dialog-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.dialog.dialog-fill .dialog-body > div {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.dialog.dialog-fill pre {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
   overflow: auto;
 }
 

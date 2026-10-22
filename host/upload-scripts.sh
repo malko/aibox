@@ -37,6 +37,7 @@ scp -o ConnectTimeout=10 \
     "$SCRIPT_DIR/guest/configure-motd.sh" \
     "$SCRIPT_DIR/guest/configure-sshd.sh" \
     "$SCRIPT_DIR/guest/update-target.sh" \
+    "$SCRIPT_DIR/guest/system-service.sh" \
     "$GUEST_USER@${GUEST_IP}:~/scripts/"
 
 ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" "chmod +x ~/scripts/*.sh"

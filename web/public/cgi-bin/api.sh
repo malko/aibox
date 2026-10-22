@@ -52,6 +52,38 @@ case "$METHOD $ROUTE" in
         cgi_aibox_json service-list --json || exit 0
         ;;
 
+    "GET units")
+        cgi_command_json "$AIBOX_ROOT/web/lib/system-service.sh" list --json || exit 0
+        ;;
+
+    "GET units/info")
+        NAME=$(query_get name || true)
+        if ! validate_unit_name "$NAME"; then
+            json_error "400 Bad Request" "invalid unit name"
+            exit 0
+        fi
+        cgi_command_json "$AIBOX_ROOT/web/lib/system-service.sh" info "$NAME" --json || exit 0
+        ;;
+
+    "GET units/logs")
+        NAME=$(query_get name || true)
+        if ! validate_unit_name "$NAME"; then
+            json_error "400 Bad Request" "invalid unit name"
+            exit 0
+        fi
+        cgi_command_action "$AIBOX_ROOT/web/lib/system-service.sh" logs "$NAME" --lines 200 || exit 0
+        ;;
+
+    "POST units/restart")
+        cgi_json_body || exit 0
+        NAME=$(printf '%s' "$CGI_BODY" | jq -r '.name // empty')
+        if ! validate_unit_name "$NAME"; then
+            json_error "400 Bad Request" "invalid unit name"
+            exit 0
+        fi
+        job_start_raw "Restart: $NAME" "$AIBOX_ROOT/web/lib/system-service.sh" restart "$NAME" || exit 0
+        ;;
+
     "GET updates")
         cgi_aibox_json check-updates --cached --json || exit 0
         ;;

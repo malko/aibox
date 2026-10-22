@@ -163,8 +163,55 @@ cgi_aibox_action() {
     json_response "$(jq -n --arg output "$output" '{ok:true,output:$output}')"
 }
 
+# Same helpers for internal web commands (open-terminal.sh, system-service.sh)
+# that are not public aibox subcommands.
+cgi_command_json() {
+    local output error_file rc
+    error_file=$(mktemp) || return 1
+
+    output=$("$@" 2>"$error_file")
+    rc=$?
+
+    if (( rc != 0 )); then
+        local error
+        error=$(cat "$error_file")
+        rm -f "$error_file"
+        json_error "500 Internal Server Error" "${error:-command failed}"
+        return 1
+    fi
+
+    rm -f "$error_file"
+    json_response "$output"
+}
+
+cgi_command_action() {
+    local output error_file rc
+    error_file=$(mktemp) || return 1
+
+    output=$("$@" 2>"$error_file")
+    rc=$?
+
+    if (( rc != 0 )); then
+        local error
+        error=$(cat "$error_file")
+        rm -f "$error_file"
+        json_error "500 Internal Server Error" "${error:-command failed}"
+        return 1
+    fi
+
+    rm -f "$error_file"
+    json_response "$(jq -n --arg output "$output" '{ok:true,output:$output}')"
+}
+
 validate_service_name() {
     [[ "$1" =~ ^[A-Za-z0-9._-]+$ ]]
+}
+
+validate_unit_name() {
+    case "$1" in
+        opencode|dsh-web|vscode-server) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 
 validate_port() {

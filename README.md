@@ -225,6 +225,8 @@ The console provides:
 - VM lifecycle: start, restart, shutdown (with optional force);
 - tunnel state and controls;
 - service list, add/edit/remove, per-service LAN exposure and links;
+- system services: status, restart, logs and connection details (password or
+  token masked by default) for opencode, dsh-web and vscode-server;
 - update check and a multi-target update selection; OS updates ask for the
   guest sudo password, which is transmitted through pipes and never written to
   disk;
@@ -520,10 +522,11 @@ aibox/
 │   ├── install-dsh-service.sh   # Install dsh-web service
 │   ├── install-claude.sh        # Install Claude Code
 │   ├── update-check.sh          # Gather available updates
+│   ├── system-service.sh        # Inspect/restart guest services (web helper)
 │   └── install-update-check.sh  # Install the update check timer
 ├── web/                         # Local web console
 │   ├── public/                  # HTML/CSS/JS and BusyBox CGI (i18n.js = translations)
-│   └── lib/                     # CGI helpers, job runner and open-terminal.sh
+│   └── lib/                     # CGI helpers, job runner, open-terminal.sh, system-service.sh
 ├── services-funcs.sh            # services.json + per-service LAN state
 └── shared-funcs.sh              # Common functions
 ```

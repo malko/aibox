@@ -24,15 +24,22 @@ This repository contains bash scripts for managing an AI development VM with KVM
   - `cmd/` - Service and VM management commands
   - `cmd/vm-snapshot` - Snapshot list/create/delete/revert; `list --json` feeds
     the web console
+  - `web/lib/system-service.sh` - Internal web helper for the guest systemd
+    units and the vscode-server container; `list --json` and `info --json` feed
+    the web console
+  - `guest/system-service.sh` - Guest side of `web/lib/system-service.sh`
+    (systemd, journalctl, docker)
   - `web/` - Local web console (BusyBox httpd, CGI bash, vanilla HTML/CSS/JS)
     - `web/public/i18n.js` - Translation catalogs (`en` default, `fr`); static
       text uses `data-i18n` attributes, dynamic text uses `t("key", params)`
     - `web/public/cgi-bin/api.sh` - API routes; `GET snapshots`, `POST
-      snapshots/create|revert|delete` and `POST terminal` back the new console
-      sections
+      snapshots/create|revert|delete`, `GET units|units/info|units/logs`,
+      `POST units/restart` and `POST terminal` back the console sections
     - `web/lib/open-terminal.sh` - Opens a host terminal running `aibox -n`
       (plain SSH, no port forwarding, no tunnel service) for the `POST
       terminal` route; `AIBOX_TERMINAL` forces one emulator
+    - `web/lib/system-service.sh` - Internal helper for the `units*` routes;
+      never exposed as a public `aibox` command
 
 ## Commands
 
