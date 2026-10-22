@@ -164,8 +164,11 @@ button { font: inherit; cursor: pointer; }
 
 .site-nav a {
   color: var(--muted);
-  font-size: 13.5px;
-  padding: 6px 10px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  padding: 6px 9px;
   border-radius: var(--radius);
   transition: color 0.15s ease, background 0.15s ease;
 }

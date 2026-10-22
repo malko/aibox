@@ -14,7 +14,7 @@
         "AIBox runs your AI agents in a virtual machine with its own kernel: the agent only reaches the files of the guest, the host stays untouched, and the box can be reset or thrown away.",
 
       "nav.model": "the model",
-      "nav.isolation": "vm or container",
+      "nav.isolation": "vm / container",
       "nav.practices": "good practices",
       "nav.how": "how it works",
       "nav.console": "console",
@@ -320,9 +320,9 @@
       "meta.description":
         "AIBox exécute vos agents IA dans une machine virtuelle dotée de son propre noyau : l'agent n'accède qu'aux fichiers du guest, l'hôte reste intact, et la boîte peut être réinitialisée puis jetée.",
 
-      "nav.model": "le modèle",
-      "nav.isolation": "vm ou conteneur",
-      "nav.practices": "bonnes pratiques",
+      "nav.model": "modèle",
+      "nav.isolation": "vm / conteneur",
+      "nav.practices": "pratiques",
       "nav.how": "principe",
       "nav.console": "console",
       "nav.faq": "questions",
