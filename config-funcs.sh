@@ -89,11 +89,14 @@ save_config() {
         if grep -qE "^${key}=" "$CONFIG_FILE" 2>/dev/null; then
             local tmp
             escaped_value=$(printf '%s' "$shell_value" | sed -e 's/[&|\\]/\\&/g')
-            tmp=$(mktemp "${CONFIG_FILE}.XXXXXX") || return 1
-            if sed "s|^${key}=.*|${key}=\"${escaped_value}\"|" "$CONFIG_FILE" > "$tmp"; then
-                mv "$tmp" "$CONFIG_FILE"
+            # Rewrite through a temp file: `sed -i` differs between GNU (Linux)
+            # and BSD (macOS, where it requires a backup-suffix argument).
+            local tmp_file
+            tmp_file=$(mktemp "${CONFIG_FILE}.XXXXXX") || return 1
+            if sed "s|^${key}=.*|${key}=\"${escaped_value}\"|" "$CONFIG_FILE" > "$tmp_file"; then
+                mv "$tmp_file" "$CONFIG_FILE"
             else
-                rm -f "$tmp"
+                rm -f "$tmp_file"
                 return 1
             fi
         else

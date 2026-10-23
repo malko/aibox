@@ -84,7 +84,7 @@ step_cli() {
     # The command was linked in a previous run, in the old location.
     OLD_LINK="$HOME/bin/aibox"
     if [[ -L "$OLD_LINK" ]]; then
-        OLD_TARGET=$(readlink -f "$OLD_LINK" 2>/dev/null || true)
+        OLD_TARGET=$(resolve_symlinks "$OLD_LINK" 2>/dev/null || true)
         if [[ "$OLD_TARGET" == "$SCRIPT_DIR_ABS/aibox" ]]; then
             rm -f "$OLD_LINK"
             print_info "Removed the old link '$OLD_LINK'."

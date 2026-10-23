@@ -19,10 +19,14 @@ source "$(dirname "$0")/../shared-funcs.sh"
 source "$(dirname "$0")/../config-funcs.sh"
 source "$(dirname "$0")/../services-funcs.sh"
 init_config_file
-source "$SCRIPT_DIR/host/vm.sh"
+source "$SCRIPT_DIR/host/backend.sh"
 
 VM_NAME=$(get_config "VM_NAME" "aibox")
-GUEST_USER=$(get_config "GUEST_USER" "aibox")
+if [[ "$VM_BACKEND" == "lima" ]]; then
+    GUEST_USER="$(vm_default_guest_user)"
+else
+    GUEST_USER=$(get_config "GUEST_USER" "aibox")
+fi
 TUNNEL_WAIT=$(get_config "TUNNEL_WAIT" "120")
 
 # Legacy global bind. It is migrated to per-service settings by cmd/tunnel, but
@@ -102,9 +106,9 @@ while ! vm_running; do
     sleep 3
 done
 
-GUEST_IP=$(vm_ip "$VM_NAME")
-if [[ -z "$GUEST_IP" ]]; then
-    echo "Could not determine the guest IP." >&2
+vm_resolve "$VM_NAME"
+if [[ -z "$VM_SSH_TARGET" ]]; then
+    echo "Could not resolve the SSH target for '$VM_NAME'." >&2
     exit 1
 fi
 
@@ -113,11 +117,11 @@ echo "Tunnel up: ${PORTS_DESC[*]}"
 # -N: no remote command/shell (without it ssh opens a shell, prints the MOTD
 # and exits 0, leaving the service silently inactive).
 # -n: never read from stdin (the unit runs without a terminal).
-exec ssh -N -n \
+exec ssh -N -n "${VM_SSH_OPTS[@]}" \
     -o ExitOnForwardFailure=yes \
     -o BatchMode=yes \
     -o ConnectTimeout=10 \
     -o ServerAliveInterval=30 \
     -o ServerAliveCountMax=3 \
     "${FORWARD_ARGS[@]}" \
-    "$GUEST_USER@$GUEST_IP"
+    "$VM_SSH_TARGET"

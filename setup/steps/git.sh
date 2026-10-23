@@ -11,7 +11,7 @@ step_git() {
         return 0
     fi
 
-    ssh -t -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" << EOF
+    vm_ssh -t -o ConnectTimeout=10 -- << EOF
 git config --global user.name "${GUEST_USER}-aibox"
 git config --global user.email "${GUEST_USER}@aibox.local"
 

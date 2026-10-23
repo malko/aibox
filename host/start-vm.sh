@@ -5,25 +5,28 @@ CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
 source "$(dirname "$0")/../shared-funcs.sh"
 source "$(dirname "$0")/../config-funcs.sh"
 init_config_file
-
-check_command virsh
+source "$SCRIPT_DIR/host/backend.sh"
 
 VM_NAME="${1:-$(get_config "VM_NAME" "aibox")}"
 MAX_WAIT="${2:-30}"
-LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 
-VM_STATE=$(LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null || echo "unknown")
+if ! vm_exists "$VM_NAME"; then
+    print_error "VM '$VM_NAME' does not exist."
+    exit 1
+fi
+
+STATE=$(vm_state "$VM_NAME")
 
 NEEDS_BOOT=false
 
-if [[ "$VM_STATE" == "running" ]]; then
+if [[ "$STATE" == "running" ]]; then
     print_info "VM '$VM_NAME' is already running"
-elif [[ "$VM_STATE" == "shut off" || "$VM_STATE" == "paused" ]]; then
+elif [[ "$STATE" == "shut off" || "$STATE" == "paused" ]]; then
     print_info "Starting VM '$VM_NAME'..."
-    virsh -c "$LIBVIRT_DEFAULT_URI" start "$VM_NAME"
+    vm_start "$VM_NAME"
     NEEDS_BOOT=true
 else
-    print_error "VM '$VM_NAME' is in state: $VM_STATE"
+    print_error "VM '$VM_NAME' is in state: $STATE"
     exit 1
 fi
 
@@ -31,64 +34,27 @@ fi
 # or when the service is already running).
 "$SCRIPT_DIR/cmd/tunnel" ensure >/dev/null 2>&1 || true
 
-load_vm_info "$VM_NAME"
+GUEST_USER="${GUEST_USER:-$(vm_default_guest_user)}"
+vm_resolve "$VM_NAME"
 
-if [[ -n "$GUEST_IP" ]] && nc -z -w 1 "$GUEST_IP" 22 &>/dev/null; then
-    print_success "VM is ready at $GUEST_IP"
+if vm_ssh_ready "$VM_NAME"; then
+    save_vm_info "$VM_NAME" "$(vm_ip "$VM_NAME")"
+    print_success "VM is ready at $VM_SSH_TARGET"
     exit 0
 fi
 
-if [[ "$NEEDS_BOOT" == "false" && -z "$GUEST_IP" ]]; then
-    print_info "No cached IP, getting current IP..."
-elif [[ "$NEEDS_BOOT" == "true" ]]; then
+if [[ "$NEEDS_BOOT" == "true" ]]; then
     print_info "Waiting for VM to boot..."
     sleep 3
 fi
 
-for i in {1..15}; do
-    GUEST_IP=$(virsh -c "$LIBVIRT_DEFAULT_URI" domifaddr "$VM_NAME" --source lease 2>/dev/null | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)
-    if [[ -n "$GUEST_IP" ]]; then
-        break
-    fi
-    if [[ "$NEEDS_BOOT" == "true" ]]; then
-        echo -n "."
-        sleep 2
-    else
-        sleep 0.5
-    fi
-done
-[[ "$NEEDS_BOOT" == "true" ]] && echo ""
+print_info "Waiting for SSH..."
 
-if [[ -z "$GUEST_IP" ]]; then
-    print_error "Could not detect VM IP."
-    exit 1
-fi
-
-print_success "VM IP: $GUEST_IP"
-
-SSH_WAIT=1
-if [[ "$NEEDS_BOOT" == "true" ]]; then
-    print_info "Waiting for SSH..."
-    SSH_WAIT=15
+if vm_wait_ready "$VM_NAME" "$MAX_WAIT"; then
+    GUEST_IP=$(vm_ip "$VM_NAME")
+    save_vm_info "$VM_NAME" "$GUEST_IP"
+    print_success "VM '$VM_NAME' is ready at $VM_SSH_TARGET"
 else
-    print_info "Checking SSH..."
-fi
-
-for i in {1..15}; do
-    if nc -z -w 1 "$GUEST_IP" 22 &>/dev/null; then
-        print_success "SSH is ready!"
-        break
-    fi
-    if [[ $i -lt $SSH_WAIT ]]; then
-        sleep 1
-    fi
-done
-
-if ! nc -z -w 1 "$GUEST_IP" 22 &>/dev/null; then
-    print_error "SSH is not responding."
+    print_error "VM '$VM_NAME' did not become reachable over SSH."
     exit 1
 fi
-
-save_vm_info "$VM_NAME" "$GUEST_IP"
-
-print_success "VM '$VM_NAME' is ready at $GUEST_IP"

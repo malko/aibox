@@ -27,17 +27,21 @@ usage_vscode() {
 
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
-    SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"
+    SOURCE_LINK="$(readlink "$SCRIPT_SOURCE")"
+    if [[ "$SOURCE_LINK" == /* ]]; then
+        SCRIPT_SOURCE="$SOURCE_LINK"
+    else
+        SCRIPT_SOURCE="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)/$SOURCE_LINK"
+    fi
 done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
 CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
 source "$SCRIPT_DIR/shared-funcs.sh"
 source "$SCRIPT_DIR/config-funcs.sh"
 init_config_file
-source "$SCRIPT_DIR/host/vm.sh"
+source "$SCRIPT_DIR/host/backend.sh"
 
 VM_NAME=$(get_config "VM_NAME" "aibox")
-GUEST_USER=$(get_config "GUEST_USER" "aibox")
 
 GUEST_PATH=""
 TARGET=""

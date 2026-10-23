@@ -1,9 +1,15 @@
 #!/bin/bash
 
-# Resolve symlinks to get actual script location
+# Resolve symlinks to get actual script location (portable: BSD readlink
+# has no -f).
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
-    SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"
+    SOURCE_LINK="$(readlink "$SCRIPT_SOURCE")"
+    if [[ "$SOURCE_LINK" == /* ]]; then
+        SCRIPT_SOURCE="$SOURCE_LINK"
+    else
+        SCRIPT_SOURCE="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)/$SOURCE_LINK"
+    fi
 done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 CMD_DIR="$SCRIPT_DIR/cmd"
@@ -136,7 +142,7 @@ _aibox_services() {
 
 _aibox_snapshots() {
     local -a snapshots
-    snapshots=(${(f)"$(virsh snapshot-list aibox --name 2>/dev/null)"})
+    snapshots=(${(f)"$(aibox snapshot list --json 2>/dev/null | jq -r '.[].name')"})
     snapshots=(${snapshots:#})
     (( ${#snapshots} )) || return 0
     _describe 'snapshot' snapshots
@@ -314,7 +320,7 @@ _aibox_services() {
 }
 
 _aibox_snapshots() {
-    virsh snapshot-list aibox --name 2>/dev/null
+    aibox snapshot list --json 2>/dev/null | jq -r '.[].name'
 }
 
 _aibox() {
@@ -587,13 +593,16 @@ init_config_file
 
 # --- CONFIGURATION FROM CONFIG FILE ---
 VM_NAME=$(get_config "VM_NAME" "aibox")
-GUEST_USER=$(get_config "GUEST_USER" "aibox")
 SERVICES_FILE="${HOME}/.config/aibox/services.json"
 source "$SCRIPT_DIR/services-funcs.sh"
-LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 
-# VM helpers (the macOS branch replaces this with host/backend.sh).
-source "$SCRIPT_DIR/host/vm.sh"
+# Load the VM backend: libvirt (Linux) or Lima (macOS).
+source "$SCRIPT_DIR/host/backend.sh"
+if [[ "$VM_BACKEND" == "lima" ]]; then
+    GUEST_USER="$(vm_default_guest_user)"
+else
+    GUEST_USER=$(get_config "GUEST_USER" "aibox")
+fi
 
 # Handle commands
 case "$1" in
@@ -644,7 +653,7 @@ case "$1" in
         exit $?
         ;;
     update)
-        "$CMD_DIR/update-target" --vm "$VM_NAME" --user "$GUEST_USER" "${@:2}"
+        "$CMD_DIR/update-target" --vm "$VM_NAME" "${@:2}"
         exit $?
         ;;
     check-updates)
@@ -748,6 +757,8 @@ fi
 set -- "${CLI_PORTS[@]}"
 
 # Start VM if it's not running
+vm_backend_require
+
 if ! vm_exists "$VM_NAME"; then
     print_error "VM '$VM_NAME' does not exist."
     echo "Run 'aibox setup' to create it." >&2
@@ -765,22 +776,16 @@ if [[ "$NO_SERVICE" == "false" && "$TUNNEL_INSTALLED" == "true" ]]; then
     "$CMD_DIR/tunnel" ensure >/dev/null 2>&1 || true
 fi
 
-# Dynamic IP Detection
-echo -n "Detecting Guest IP..."
-for i in {1..20}; do
-    GUEST_IP=$(vm_ip "$VM_NAME")
-    if [ -n "$GUEST_IP" ]; then
-        break
-    fi
-    printf "."
-    sleep 1
-done
+# Resolve how to reach the guest (SSH target) and wait for SSH to be ready.
+vm_resolve "$VM_NAME"
 
-if [ -z "$GUEST_IP" ]; then
-    echo -e "\nError: Could not detect Guest IP."
+echo -n "Waiting for SSH..."
+if ! vm_wait_ready "$VM_NAME" 60; then
+    echo ""
+    print_error "Could not reach the VM over SSH."
     exit 1
 fi
-echo -e "\nFound IP: $GUEST_IP"
+echo " ready!"
 
 # Ad-hoc forwards bind to localhost unless --lan is given.
 BIND_ADDR="127.0.0.1"
@@ -805,23 +810,15 @@ if [[ $# -gt 0 ]]; then
     done
 fi
 
-# Wait for SSH to be ready
-echo -n "Waiting for SSH..."
-while ! nc -z -w 1 "$GUEST_IP" 22 &>/dev/null; do
-    printf "."
-    sleep 1
-done
-echo -e "\nSSH is ready!"
-
 # Connect
 if [[ ${#FORWARD_ARGS[@]} -gt 0 ]]; then
     if [[ $# -gt 0 ]]; then
-        echo "Connecting to $GUEST_USER@$GUEST_IP with port(s): $*"
+        echo "Connecting to $VM_SSH_TARGET with port(s): $*"
     else
-        echo "Connecting to $GUEST_USER@$GUEST_IP with configured services"
+        echo "Connecting to $VM_SSH_TARGET with configured services"
     fi
 else
-    echo "Connecting to $GUEST_USER@$GUEST_IP (no port forwarding)"
+    echo "Connecting to $VM_SSH_TARGET (no port forwarding)"
 fi
 
-ssh -o ConnectTimeout=5 "${FORWARD_ARGS[@]}" "$GUEST_USER@$GUEST_IP"
+vm_ssh "${FORWARD_ARGS[@]}"

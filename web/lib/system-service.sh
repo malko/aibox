@@ -114,13 +114,12 @@ unit_is_known() {
 source "$AIBOX_ROOT/shared-funcs.sh"
 source "$AIBOX_ROOT/config-funcs.sh"
 source "$AIBOX_ROOT/services-funcs.sh"
-source "$AIBOX_ROOT/host/vm.sh"
 init_config_file
+source "$AIBOX_ROOT/host/backend.sh"
 
 parse_system_service_args "$@"
 
 VM_NAME=$(get_config "VM_NAME" "aibox")
-GUEST_USER=$(get_config "GUEST_USER" "aibox")
 
 if [[ "$(vm_state "$VM_NAME")" != "running" ]]; then
     echo "the VM is not running" >&2

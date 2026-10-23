@@ -14,7 +14,7 @@ step_opencode() {
     fi
 
     print_info "Configuring OpenCode..."
-    ssh -o ConnectTimeout=10 "$GUEST_USER@$GUEST_IP" 'mkdir -p ~/.config/opencode; if [ ! -f ~/.config/opencode/opencode.json ]; then echo "{ \"provider\": {} }" > ~/.config/opencode/opencode.json; fi'
+    vm_ssh -o ConnectTimeout=10 -- 'mkdir -p ~/.config/opencode; if [ ! -f ~/.config/opencode/opencode.json ]; then echo "{ \"provider\": {} }" > ~/.config/opencode/opencode.json; fi'
 
     print_info "Installing opencode server service..."
     print_info "opencode generates its own password at startup (shown in the MOTD and 'aibox status')."

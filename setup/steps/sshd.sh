@@ -11,7 +11,7 @@ step_sshd() {
         return 0
     fi
 
-    PASSWORD_AUTH_DISABLED=$(ssh -o ConnectTimeout=5 "$GUEST_USER@$GUEST_IP" "grep -qs '^PasswordAuthentication no' /etc/ssh/sshd_config.d/00-aibox.conf && echo yes" 2>/dev/null || echo "")
+    PASSWORD_AUTH_DISABLED=$(vm_ssh -o ConnectTimeout=5 -- "grep -qs '^PasswordAuthentication no' /etc/ssh/sshd_config.d/00-aibox.conf && echo yes" 2>/dev/null || echo "")
     if [[ -n "$PASSWORD_AUTH_DISABLED" ]]; then
         print_info "Password authentication already disabled, skipping."
         return 0

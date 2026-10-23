@@ -4,16 +4,50 @@
 # Sourced by setup.sh when --status is used. The probe is best-effort: a
 # missing VM or an unreachable guest reports "unknown" instead of failing.
 
-declare -A STATUS_STEP_STATUS=()
-declare -A STATUS_STEP_REASON=()
-declare -A STATUS_WEB_RUNNABLE=()
+# Indexed arrays keyed by the step position: associative arrays are not
+# available in the bash 3.2 shipped by macOS.
+STATUS_STEP_STATUS=()
+STATUS_STEP_REASON=()
+STATUS_WEB_RUNNABLE=()
+STATUS_GUEST_PROBE=()
+
+status_step_index() {
+    local i=0 step
+    for step in "${SETUP_STEP_ORDER[@]}"; do
+        if [[ "$step" == "$1" ]]; then
+            printf '%s\n' "$i"
+            return 0
+        fi
+        i=$((i + 1))
+    done
+    return 1
+}
+
+status_set() {
+    local kind="$1" step="$2" value="$3" idx
+    idx=$(status_step_index "$step") || return 1
+    case "$kind" in
+        status) STATUS_STEP_STATUS[$idx]="$value" ;;
+        reason) STATUS_STEP_REASON[$idx]="$value" ;;
+        web)    STATUS_WEB_RUNNABLE[$idx]="$value" ;;
+    esac
+}
+
+status_get() {
+    local kind="$1" step="$2" idx
+    idx=$(status_step_index "$step") || return 1
+    case "$kind" in
+        status) printf '%s\n' "${STATUS_STEP_STATUS[$idx]:-unknown}" ;;
+        reason) printf '%s\n' "${STATUS_STEP_REASON[$idx]:-}" ;;
+        web)    printf '%s\n' "${STATUS_WEB_RUNNABLE[$idx]:-false}" ;;
+    esac
+}
 
 STATUS_VM_EXISTS=false
 STATUS_VM_RUNNING=false
 STATUS_VM_STATE="unknown"
 STATUS_VM_IP=""
 STATUS_GUEST_REACHABLE=false
-STATUS_GUEST_PROBE=""
 
 status_config_key() {
     case "$1" in
@@ -51,7 +85,7 @@ status_needs_sudo_with_deps() {
     local step="$1" dep
 
     status_self_needs_sudo "$step" && return 0
-    for dep in ${SETUP_STEP_DEPS[$step]:-}; do
+    for dep in $(setup_step_deps "$step"); do
         status_needs_sudo_with_deps "$dep" && return 0
     done
     return 1
@@ -78,7 +112,7 @@ status_probe_guest() {
     [[ "$STATUS_GUEST_REACHABLE" == "true" ]] || return 0
 
     local output
-    output=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$GUEST_USER@$STATUS_VM_IP" 'bash -s' 2>/dev/null <<'PROBE'
+    output=$(vm_ssh -o BatchMode=yes -o ConnectTimeout=5 -- bash -s 2>/dev/null <<'PROBE'
 set -u
 
 export NVM_DIR="$HOME/.nvm"
@@ -111,12 +145,13 @@ check virtiofs 'test "$(findmnt -n -o FSTYPE "$HOME/git" 2>/dev/null)" = virtiof
 PROBE
 ) || output=""
 
-    local line key value
+    local line key value idx
     while IFS= read -r line; do
         [[ -n "$line" ]] || continue
         key="${line%%=*}"
         value="${line#*=}"
-        STATUS_GUEST_PROBE["$key"]="$value"
+        idx=$(status_step_index "$key") || continue
+        STATUS_GUEST_PROBE[$idx]="$value"
     done <<< "$output"
 }
 
@@ -130,11 +165,13 @@ status_guest_value() {
         echo "unknown"
         return 0
     fi
-    echo "${STATUS_GUEST_PROBE[$key]:-unknown}"
+    local idx
+    idx=$(status_step_index "$key") || { echo "unknown"; return 0; }
+    echo "${STATUS_GUEST_PROBE[$idx]:-unknown}"
 }
 
 status_collect() {
-    source "$SCRIPT_DIR/host/vm.sh"
+    source "$SCRIPT_DIR/host/backend.sh"
 
     setup_ensure_host_context
 
@@ -155,7 +192,8 @@ status_collect() {
                 load_vm_info "$VM_NAME"
                 STATUS_VM_IP="$GUEST_IP"
             fi
-            if [[ -n "$STATUS_VM_IP" ]] && nc -z -w 1 "$STATUS_VM_IP" 22 &>/dev/null; then
+            vm_resolve "$VM_NAME"
+            if vm_ssh_ready "$VM_NAME"; then
                 STATUS_GUEST_REACHABLE=true
             fi
         fi
@@ -216,12 +254,12 @@ status_collect() {
             fi
         fi
 
-        STATUS_STEP_STATUS["$step"]="$status"
-        STATUS_STEP_REASON["$step"]="$reason"
+        status_set status "$step" "$status"
+        status_set reason "$step" "$reason"
         if status_is_web_runnable "$step"; then
-            STATUS_WEB_RUNNABLE["$step"]=true
+            status_set web "$step" true
         else
-            STATUS_WEB_RUNNABLE["$step"]=false
+            status_set web "$step" false
         fi
     done
 }
@@ -234,8 +272,8 @@ setup_status_json() {
 
     for step in "${SETUP_STEP_ORDER[@]}"; do
         web_json=false
-        [[ "${STATUS_WEB_RUNNABLE[$step]:-false}" == "true" ]] && web_json=true
-        reason="${STATUS_STEP_REASON[$step]:-}"
+        [[ "$(status_get web "$step")" == "true" ]] && web_json=true
+        reason="$(status_get reason "$step")"
         needs_sudo=false
         needs_sudo_with_deps=false
         status_self_needs_sudo "$step" && needs_sudo=true
@@ -243,8 +281,8 @@ setup_status_json() {
 
         jq -n \
             --arg name "$step" \
-            --arg description "${SETUP_STEP_DESC[$step]}" \
-            --arg status "${STATUS_STEP_STATUS[$step]}" \
+            --arg description "$(setup_step_desc "$step")" \
+            --arg status "$(status_get status "$step")" \
             --argjson web_runnable "$web_json" \
             --argjson needs_sudo "$needs_sudo" \
             --argjson needs_sudo_with_deps "$needs_sudo_with_deps" \
@@ -287,14 +325,14 @@ setup_status_human() {
     status_collect
 
     echo "Setup status:"
-    printf '  %-14s %-11s %s\n' "vm" "${STATUS_STEP_STATUS[vm]}" "${STATUS_STEP_DESC[vm]}"
+    printf '  %-14s %-11s %s\n' "vm" "$(status_get status vm)" "$(setup_step_desc vm)"
 
     local step
     for step in "${SETUP_STEP_ORDER[@]}"; do
         [[ "$step" == "vm" ]] && continue
         printf '  %-14s %-11s %s\n' \
             "$step" \
-            "${STATUS_STEP_STATUS[$step]}" \
-            "${SETUP_STEP_DESC[$step]}"
+            "$(status_get status "$step")" \
+            "$(setup_step_desc "$step")"
     done
 }

@@ -15,7 +15,7 @@ SVC_AVAILABLE=false
 
 # svc_manager_detect prints the platform service manager.
 svc_manager_detect() {
-    if is_macos; then
+    if is_macos && command -v launchctl &>/dev/null; then
         printf '%s\n' "launchd"
     elif command -v systemctl &>/dev/null && systemctl --user show-environment &>/dev/null; then
         printf '%s\n' "systemd"

@@ -17,10 +17,14 @@ source "$SCRIPT_DIR/config-funcs.sh"
 source "$SCRIPT_DIR/services-funcs.sh"
 init_config_file
 source "$SCRIPT_DIR/host/service.sh"
-source "$SCRIPT_DIR/host/vm.sh"
+source "$SCRIPT_DIR/host/backend.sh"
 
 VM_NAME=$(get_config "VM_NAME" "aibox")
-GUEST_USER=$(get_config "GUEST_USER" "aibox")
+if [[ "$VM_BACKEND" == "lima" ]]; then
+    GUEST_USER="$(vm_default_guest_user)"
+else
+    GUEST_USER=$(get_config "GUEST_USER" "aibox")
+fi
 
 usage() {
     echo "Usage: aibox tunnel <command> [options]"
@@ -99,13 +103,12 @@ guest_dsh_url() {
 
     [[ "$(vm_state "$VM_NAME")" == "running" ]] || return 0
 
-    local ip
-    ip=$(vm_ip "$VM_NAME")
-    [[ -n "$ip" ]] || return 0
+    vm_resolve "$VM_NAME"
+    vm_ssh_ready "$VM_NAME" || return 0
 
     # -n: never read stdin, or ssh would swallow the remaining lines of the
     # service list read by service_urls' while loop.
-    DSH_GUEST_URL=$(ssh -n -o BatchMode=yes -o ConnectTimeout=5 "$GUEST_USER@$ip" \
+    DSH_GUEST_URL=$(vm_ssh -n -o BatchMode=yes -o ConnectTimeout=5 -- \
         'journalctl --user -u dsh-web.service -n 500 --no-pager -o cat 2>/dev/null | tr -d "\033" | grep -oE "https?://[^[:space:]\"]+" | tail -n 1' 2>/dev/null || true)
     printf '%s' "$DSH_GUEST_URL"
 }
@@ -124,15 +127,14 @@ guest_opencode_password() {
 
     [[ "$(vm_state "$VM_NAME")" == "running" ]] || return 0
 
-    local ip
-    ip=$(vm_ip "$VM_NAME")
-    [[ -n "$ip" ]] || return 0
+    vm_resolve "$VM_NAME"
+    vm_ssh_ready "$VM_NAME" || return 0
 
     # Read the journal since the last service start so the key is found even
     # after a long run; fall back to the last 500 lines.
     # -n: never read stdin, or ssh would swallow the remaining lines of the
     # service list read by service_urls' while loop.
-    OPENCODE_GUEST_PASSWORD=$(ssh -n -o BatchMode=yes -o ConnectTimeout=5 "$GUEST_USER@$ip" \
+    OPENCODE_GUEST_PASSWORD=$(vm_ssh -n -o BatchMode=yes -o ConnectTimeout=5 -- \
         'since=$(systemctl --user show -p ActiveEnterTimestamp --value opencode.service 2>/dev/null); if [ -n "$since" ]; then journalctl --user -u opencode.service --since "$since" --no-pager -o cat; else journalctl --user -u opencode.service -n 500 --no-pager -o cat; fi 2>/dev/null | tr -d "\033" | sed -nE "s/.*server password ([^[:space:]]+).*/\1/p" | tail -n 1' 2>/dev/null || true)
     printf '%s' "$OPENCODE_GUEST_PASSWORD"
 }
@@ -284,7 +286,7 @@ guest_probe_ports() {
     # guest shell is the only one interpreting the loop. The timeout is short:
     # the web console polls the status regularly and the server is
     # single-threaded, so a slow probe delays every other request.
-    ssh -o BatchMode=yes -o ConnectTimeout=3 "$GUEST_USER@$ip" bash -s -- "${ports[@]}" <<'PROBE' 2>/dev/null
+    vm_ssh -o BatchMode=yes -o ConnectTimeout=3 -- bash -s -- "${ports[@]}" <<'PROBE' 2>/dev/null
 for p in "$@"; do
     if (exec 3<>/dev/tcp/127.0.0.1/"$p") 2>/dev/null; then
         echo "$p up"
@@ -308,7 +310,11 @@ probe_service_states() {
     PROBE_STATE=()
 
     if [[ -z "$guest_ip" ]]; then
-        return 0
+        [[ "$(vm_state "$VM_NAME")" == "running" ]] || return 0
+        vm_resolve "$VM_NAME"
+        guest_ip="$VM_SSH_TARGET"
+    else
+        vm_resolve "$VM_NAME"
     fi
 
     while IFS=$'\t' read -r pname pport; do
@@ -531,15 +537,8 @@ lan_security_warnings() {
         return 0
     fi
 
-    local ip target
-    ip=$(vm_ip "$VM_NAME")
-    if [[ -z "$ip" ]]; then
-        print_info "Guest IP unknown: skipping authentication checks."
-        return 0
-    fi
-    target="$GUEST_USER@$ip"
-
-    if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" true &>/dev/null; then
+    vm_resolve "$VM_NAME"
+    if ! vm_ssh_ready "$VM_NAME"; then
         print_info "VM not reachable over SSH: skipping authentication checks."
         return 0
     fi
@@ -547,7 +546,7 @@ lan_security_warnings() {
     local warnings=0
 
     if [[ "$check_opencode" == "true" ]] \
-        && ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" \
+        && vm_ssh -o BatchMode=yes -o ConnectTimeout=5 -- \
             "systemctl --user is-active --quiet opencode.service" &>/dev/null; then
         # opencode v2 always generates a server password at startup.
         if [[ -n "$(guest_opencode_password)" ]]; then
@@ -559,9 +558,9 @@ lan_security_warnings() {
     fi
 
     if [[ "$check_vscode" == "true" ]] \
-        && ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" \
+        && vm_ssh -o BatchMode=yes -o ConnectTimeout=5 -- \
             "test -f ~/vscode-server/docker-compose.yml"; then
-        if ssh -o BatchMode=yes -o ConnectTimeout=5 "$target" \
+        if vm_ssh -o BatchMode=yes -o ConnectTimeout=5 -- \
             "grep -q -- '--auth password' ~/vscode-server/docker-compose.yml && grep -q 'PASSWORD=.' ~/vscode-server/docker-compose.yml"; then
             print_info "vscode-server: password protected."
         else
