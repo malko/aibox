@@ -1,0 +1,40 @@
+# Lima instance template for AIBox (macOS backend).
+#
+# host/create-vm-lima.sh fills the __...__ placeholders and starts the
+# instance. The guest is a plain Ubuntu cloud image; provisioning is done by
+# aibox setup over SSH, exactly like the libvirt backend.
+#
+# The host directory ~/git is mounted writable inside the guest at ~/git so
+# that repositories can be shared with the VM (the macOS equivalent of the
+# libvirt virtiofs share).
+
+cpus: __CPUS__
+memory: "__MEMORY__"
+disk: "__DISK__"
+
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: "aarch64"
+  - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
+    arch: "x86_64"
+
+# aibox installs its own runtime (Docker, Node through nvm); skip Lima's
+# bundled containerd to keep the guest lean and the first boot fast.
+containerd:
+  system: false
+  user: false
+
+mounts:
+  - location: "~/git"
+    mountPoint: "{{.Home}}/git"
+    writable: true
+
+# Disable Lima's automatic dynamic port forwarding: the guest services are
+# exposed only through the aibox tunnel service, so nothing is reachable
+# while the service is stopped. This rule matches every guest port and
+# short-circuits Lima's built-in fallback rule.
+portForwards:
+  - guestIP: "0.0.0.0"
+    guestPortRange: [1, 65535]
+    proto: "any"
+    ignore: true

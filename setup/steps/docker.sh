@@ -11,7 +11,7 @@ step_docker() {
         return 0
     fi
 
-    DOCKER_INSTALLED=$(ssh -o ConnectTimeout=5 "$GUEST_USER@$GUEST_IP" "command -v docker" 2>/dev/null || echo "")
+    DOCKER_INSTALLED=$(vm_ssh -o ConnectTimeout=5 -- "command -v docker" 2>/dev/null || echo "")
     if [[ -n "$DOCKER_INSTALLED" ]]; then
         print_info "Docker already installed, skipping."
         return 0

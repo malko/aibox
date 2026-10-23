@@ -3,25 +3,26 @@ set -e
 
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
-    SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"
+    SOURCE_LINK="$(readlink "$SCRIPT_SOURCE")"
+    if [[ "$SOURCE_LINK" == /* ]]; then
+        SCRIPT_SOURCE="$SOURCE_LINK"
+    else
+        SCRIPT_SOURCE="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)/$SOURCE_LINK"
+    fi
 done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
 CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
-source "$SCRIPT_DIR/config-funcs.sh"
 source "$SCRIPT_DIR/shared-funcs.sh"
+source "$SCRIPT_DIR/config-funcs.sh"
 init_config_file
+source "$SCRIPT_DIR/host/backend.sh"
 
 VM_NAME=$(get_config "VM_NAME" "aibox")
-LIBVIRT_DEFAULT_URI=$(get_config "LIBVIRT_DEFAULT_URI" "qemu:///system")
 ACTION="${1:-}"
 SNAPSHOT_NAME=""
 ASSUME_YES=false
 JSON=false
 RESTART=false
-
-vm_state() {
-    LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" domstate "$VM_NAME" 2>/dev/null || echo "unknown"
-}
 
 usage_snapshot() {
     echo "Usage: aibox snapshot <command> [options]"
@@ -49,13 +50,12 @@ usage_snapshot() {
 
 # snapshot_names: one snapshot name per line.
 snapshot_names() {
-    LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" snapshot-list "$VM_NAME" --name 2>/dev/null || true
+    vm_snapshot_list "$VM_NAME" || true
 }
 
 # snapshot_field <name> <field>: reads a field of a snapshot XML dump.
 snapshot_field() {
-    LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" snapshot-dumpxml "$VM_NAME" "$1" 2>/dev/null \
-        | sed -nE "s#.*<$2>([^<]*)</$2>.*#\1#p" | head -n 1
+    vm_snapshot_field "$VM_NAME" "$1" "$2"
 }
 
 # snapshots_json: machine-readable list of the snapshots.
@@ -87,7 +87,7 @@ snapshots_json() {
 wait_shutdown() {
     local i state
     for ((i = 0; i < 30; i++)); do
-        state=$(vm_state)
+        state=$(vm_state "$VM_NAME")
         [[ "$state" == "shut off" ]] && return 0
         sleep 1
     done
@@ -105,6 +105,16 @@ for arg in "${@:2}"; do
         *) [[ -z "$SNAPSHOT_NAME" ]] && SNAPSHOT_NAME="$arg" ;;
     esac
 done
+
+if [[ "$ACTION" =~ ^(list|create|delete|revert)$ ]] && ! vm_snapshot_supported; then
+    if [[ "$ACTION" == "list" && "$JSON" == "true" ]]; then
+        # The web console probes the snapshot list on every VM backend.
+        printf '[]\n'
+        exit 0
+    fi
+    print_error "Snapshots are not supported with the '$VM_BACKEND' backend (macOS/Lima)."
+    exit 1
+fi
 
 case "$ACTION" in
     -h|--help)
@@ -127,7 +137,7 @@ case "$ACTION" in
             SNAPSHOT_NAME="aibox-$(date +%Y%m%d-%H%M%S)"
         fi
 
-        STATE=$(vm_state)
+        STATE=$(vm_state "$VM_NAME")
         if [[ "$STATE" == "running" ]]; then
             if [[ "$ASSUME_YES" != "true" ]]; then
                 echo "Warning: VM is running. For reliable internal snapshots, shutdown first."
@@ -140,7 +150,7 @@ case "$ACTION" in
             fi
 
             echo "Shutting down the VM..."
-            LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" shutdown "$VM_NAME" 2>/dev/null || true
+            vm_shutdown "$VM_NAME"
             if ! wait_shutdown; then
                 echo "Error: the VM did not shut down in time."
                 exit 1
@@ -148,16 +158,16 @@ case "$ACTION" in
         fi
 
         echo "Creating internal snapshot '$SNAPSHOT_NAME'..."
-        ERROR_OUTPUT=$(LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" snapshot-create-as "$VM_NAME" "$SNAPSHOT_NAME" 2>&1) || {
-            echo "Failed to create snapshot: $ERROR_OUTPUT"
+        if ! vm_snapshot_create "$VM_NAME" "$SNAPSHOT_NAME"; then
+            echo "Failed to create snapshot."
             exit 1
-        }
+        fi
 
         echo "Snapshot '$SNAPSHOT_NAME' created successfully."
 
         if [[ "$RESTART" == "true" ]]; then
             echo "Starting the VM again..."
-            LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" start "$VM_NAME" 2>/dev/null || true
+            vm_start "$VM_NAME" >/dev/null 2>&1 || true
         fi
         ;;
 
@@ -168,8 +178,7 @@ case "$ACTION" in
         fi
 
         echo "Deleting snapshot '$SNAPSHOT_NAME'..."
-        LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" snapshot-delete "$VM_NAME" "$SNAPSHOT_NAME" --metadata 2>/dev/null || \
-            LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" snapshot-delete "$VM_NAME" "$SNAPSHOT_NAME"
+        vm_snapshot_delete "$VM_NAME" "$SNAPSHOT_NAME"
 
         echo "Snapshot '$SNAPSHOT_NAME' deleted."
         ;;
@@ -180,28 +189,28 @@ case "$ACTION" in
             exit 1
         fi
 
-        STATE=$(vm_state)
+        STATE=$(vm_state "$VM_NAME")
         if [[ "$STATE" == "running" ]]; then
             echo "VM is running. Shutting down before reverting..."
-            LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" shutdown "$VM_NAME" 2>/dev/null || true
+            vm_shutdown "$VM_NAME"
             if ! wait_shutdown; then
                 echo "Error: the VM did not shut down in time."
                 exit 1
             fi
         fi
 
-        STATE=$(vm_state)
+        STATE=$(vm_state "$VM_NAME")
         if [[ "$STATE" != "shut off" ]]; then
             echo "Error: VM did not shutdown in time."
             exit 1
         fi
 
         echo "Reverting to snapshot '$SNAPSHOT_NAME'..."
-        LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" snapshot-revert "$VM_NAME" "$SNAPSHOT_NAME"
+        vm_snapshot_revert "$VM_NAME" "$SNAPSHOT_NAME"
 
         if [[ "$RESTART" == "true" ]]; then
             echo "Starting the VM again..."
-            LC_ALL=C virsh -c "$LIBVIRT_DEFAULT_URI" start "$VM_NAME" 2>/dev/null || true
+            vm_start "$VM_NAME" >/dev/null 2>&1 || true
         fi
 
         echo ""

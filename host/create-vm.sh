@@ -13,7 +13,7 @@ check_command virt-install
 
 print_ascii_logo
 
-HOSTNAME_LOCAL=$(hostname).local
+HOSTNAME_LOCAL=$(host_local_name)
 print_info "=== Create New VM ==="
 print_info "This script will create a new VM for AIBox"
 print_info "Host detected: $HOSTNAME_LOCAL"

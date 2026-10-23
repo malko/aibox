@@ -11,11 +11,23 @@ step_hosts() {
         return 0
     fi
 
-    HOST_ENTRY_EXISTS=$(ssh -o ConnectTimeout=5 "$GUEST_USER@$GUEST_IP" "grep -q 'aibox-host' /etc/hosts && echo 'yes'" 2>/dev/null || echo "no")
+    HOST_ENTRY_EXISTS=$(vm_ssh -o ConnectTimeout=5 -- "grep -q 'aibox-host' /etc/hosts && echo 'yes'" 2>/dev/null || echo "no")
     if [[ "$HOST_ENTRY_EXISTS" == "yes" ]]; then
         print_info "aibox-host entry already exists in VM /etc/hosts, skipping."
         return 0
     fi
 
-    setup_guest_ssh '. "$HOME/scripts/sudo-funcs.sh"; sudo_cmd sh -c '\''printf "%s\n" "$1" >> /etc/hosts'\'' _ "192.168.122.1    aibox-host"'
+    # libvirt: fixed host gateway. Lima: resolve host.lima.internal in the guest.
+    HOST_ADDRESS=$(vm_host_alias_ip)
+    if [[ ! "$HOST_ADDRESS" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        HOST_ADDRESS=$(vm_ssh -o ConnectTimeout=5 -- "getent hosts $HOST_ADDRESS | awk '{print \$1}'" 2>/dev/null || echo "")
+    fi
+
+    if [[ -z "$HOST_ADDRESS" ]]; then
+        print_error "Could not resolve the host address for 'aibox-host'."
+        return 1
+    fi
+
+    local entry="$HOST_ADDRESS    aibox-host"
+    setup_guest_ssh '. "$HOME/scripts/sudo-funcs.sh"; sudo_cmd sh -c '\''printf "%s\n" "$1" >> /etc/hosts'\'' _ '"$(printf '%q' "$entry")"
 }

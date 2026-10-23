@@ -19,7 +19,12 @@ fi
 
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
-    SCRIPT_SOURCE="$(readlink -f "$SCRIPT_SOURCE")"
+    SOURCE_LINK="$(readlink "$SCRIPT_SOURCE")"
+    if [[ "$SOURCE_LINK" == /* ]]; then
+        SCRIPT_SOURCE="$SOURCE_LINK"
+    else
+        SCRIPT_SOURCE="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)/$SOURCE_LINK"
+    fi
 done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
 

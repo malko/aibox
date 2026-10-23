@@ -22,7 +22,7 @@ CONFIG_FILE="$HOME/.config/aibox/aibox.conf"
 source "$AIBOX_ROOT/shared-funcs.sh"
 source "$AIBOX_ROOT/config-funcs.sh"
 init_config_file
-source "$AIBOX_ROOT/host/vm.sh"
+source "$AIBOX_ROOT/host/backend.sh"
 
 VM_NAME=$(get_config "VM_NAME" "aibox")
 
