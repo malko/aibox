@@ -101,7 +101,8 @@ if ! command -v code &>/dev/null; then
     exit 1
 fi
 
-# Host directory shared with the VM (virtiofs), and its guest mount point.
+# Host directory shared with the VM (virtiofs or Lima mount), and its guest
+# mount point.
 HOST_SHARE_DIR=$(get_config "HOST_SHARE_DIR" "$HOME/git")
 HOST_SHARE_DIR=$(aibox_expand_tilde "$HOST_SHARE_DIR")
 if [[ ! -d "$HOST_SHARE_DIR" ]]; then
@@ -110,11 +111,20 @@ if [[ ! -d "$HOST_SHARE_DIR" ]]; then
 fi
 SHARE_DIR=$(cd -- "$HOST_SHARE_DIR" && pwd -P)
 
-# Guest paths: Lima mounts the share under /home/<user>.linux.
-if is_macos; then
-    GUEST_HOME="/home/${GUEST_USER}.linux"
-else
-    GUEST_HOME="/home/$GUEST_USER"
+# Resolve the guest home instead of guessing it: Lima used
+# /home/<user>.linux before v2.1 and /home/<user>.guest since then. The
+# fallback is only used when the VM is stopped; the caller then fails below.
+vm_resolve "$VM_NAME"
+GUEST_HOME=""
+if [[ "$(vm_state "$VM_NAME")" == "running" ]]; then
+    GUEST_HOME=$(vm_ssh -o BatchMode=yes -o ConnectTimeout=5 -- 'printf %s "$HOME"' 2>/dev/null || true)
+fi
+if [[ -z "$GUEST_HOME" ]]; then
+    if [[ "$VM_BACKEND" == "lima" ]]; then
+        GUEST_HOME="/home/${GUEST_USER}.guest"
+    else
+        GUEST_HOME="/home/$GUEST_USER"
+    fi
 fi
 GUEST_SHARE="$GUEST_HOME/git"
 
@@ -201,9 +211,8 @@ if [[ "$(vm_state "$VM_NAME")" != "running" ]]; then
     exit 1
 fi
 
-vm_resolve "$VM_NAME"
-if [[ "$VM_SSH_TARGET" == *@ ]]; then
-    print_error "Could not detect the guest IP."
+if [[ -z "$VM_SSH_TARGET" || "$VM_SSH_TARGET" == *@ ]]; then
+    print_error "Could not resolve the SSH target for '$VM_NAME'."
     exit 1
 fi
 AUTHORITY="$VM_SSH_TARGET"

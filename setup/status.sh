@@ -103,7 +103,13 @@ status_web_reason() {
         vm) echo "VM creation is CLI-only" ;;
         ssh) echo "SSH setup may ask for a password" ;;
         vscode) echo "vscode-server asks for a password" ;;
-        virtiofs) echo "modifies the host libvirt configuration" ;;
+        virtiofs)
+            if [[ "$VM_BACKEND" == "lima" ]]; then
+                echo "configured when the Lima instance is created"
+            else
+                echo "modifies the host libvirt configuration"
+            fi
+            ;;
         *) echo "" ;;
     esac
 }
@@ -141,7 +147,7 @@ check opencode 'systemctl --user cat opencode.service'
 check dsh 'command -v dsh && systemctl --user cat dsh-web.service'
 check claude 'command -v claude'
 check update-check 'systemctl --user cat aibox-update-check.timer'
-check virtiofs 'test "$(findmnt -n -o FSTYPE "$HOME/git" 2>/dev/null)" = virtiofs'
+check virtiofs 'findmnt -n -M "$HOME/git" >/dev/null 2>&1'
 PROBE
 ) || output=""
 

@@ -144,17 +144,23 @@ open_macos_terminal() {
     script=$(temp_file command) || return 1
     {
         printf '#!/bin/sh\n'
+        # Terminal.app may start the script after `open` has returned: let the
+        # script remove itself instead of deleting it from the parent.
+        printf 'rm -f "$0"\n'
         printf 'exec %s %s\n' "$AIBOX_SCRIPT" "${AIBOX_ARGS[*]}"
     } > "$script"
     chmod +x "$script"
 
-    open -a Terminal "$script" >/dev/null 2>&1
-    local status=$?
-    rm -f "$script"
-    return $status
+    if ! open -a Terminal "$script" >/dev/null 2>&1; then
+        rm -f "$script"
+        return 1
+    fi
+    return 0
 }
 
-if [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
+# A graphical session check makes sense on Linux only: macOS has no DISPLAY or
+# WAYLAND_DISPLAY, but Terminal.app is always available.
+if ! is_macos && [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
     echo "No graphical session: run this command in a terminal instead:"
     echo "  $AIBOX_SCRIPT ${AIBOX_ARGS[*]}"
     exit 0

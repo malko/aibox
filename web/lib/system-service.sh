@@ -253,7 +253,7 @@ print_info() {
     local since
     since=$(printf '%s' "$unit" | jq -r '.since // empty')
     if [[ -n "$since" ]]; then
-        printf 'Since:    %s\n' "$(date -d "@$since" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || printf '%s' "$since")"
+        printf 'Since:    %s\n' "$(date -d "@$since" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -r "$since" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || printf '%s' "$since")"
     fi
 
     local url_local url_lan password guest_url

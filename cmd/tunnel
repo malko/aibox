@@ -186,7 +186,7 @@ service_urls() {
         suffix=""
         auth=""
 
-        case "${PROBE_STATE[$guest]:-}" in
+        case "$(probe_state_get "$guest")" in
             up) state_label="up" ;;
             down) state_label="down" ;;
             *) state_label="unknown" ;;
@@ -298,16 +298,42 @@ PROBE
 }
 
 # probe_service_states <guest_ip>
-# Fills the global PROBE_STATE array with "<guest port>" -> "up" | "down".
+# Fills the probe state map with "<guest port>" -> "up" | "down".
 # The guest IP is empty when the VM is not running: nothing is probed then.
-declare -A PROBE_STATE=()
+#
+# Bash 3.2 (the /bin/bash shipped by macOS) has no associative arrays, so the
+# map is kept as two parallel indexed arrays and looked up linearly: there are
+# only a handful of services.
+PROBE_PORTS=()
+PROBE_STATES=()
+
+probe_state_reset() {
+    PROBE_PORTS=()
+    PROBE_STATES=()
+}
+
+probe_state_set() {
+    PROBE_PORTS+=("$1")
+    PROBE_STATES+=("$2")
+}
+
+probe_state_get() {
+    local port="$1" i
+    for ((i = 0; i < ${#PROBE_PORTS[@]}; i++)); do
+        if [[ "${PROBE_PORTS[$i]}" == "$port" ]]; then
+            printf '%s' "${PROBE_STATES[$i]}"
+            return 0
+        fi
+    done
+    return 1
+}
 
 probe_service_states() {
     local guest_ip="$1"
     local -a probe_ports=()
     local pname pport probe_port probe_state probe_key probe_output
 
-    PROBE_STATE=()
+    probe_state_reset
 
     if [[ -z "$guest_ip" ]]; then
         [[ "$(vm_state "$VM_NAME")" == "running" ]] || return 0
@@ -337,7 +363,7 @@ probe_service_states() {
 
     while read -r probe_port probe_state; do
         [[ -n "$probe_port" ]] || continue
-        PROBE_STATE["$probe_port"]="$probe_state"
+        probe_state_set "$probe_port" "$probe_state"
     done <<< "$probe_output"
 
     return 0
@@ -417,7 +443,7 @@ tunnel_status_json() {
         # port_open: true when the guest port is listening, false when it is
         # closed, null when the state is unknown (VM off, probe failed).
         port_open="null"
-        case "${PROBE_STATE[$guest]:-}" in
+        case "$(probe_state_get "$guest")" in
             up) port_open="true" ;;
             down) port_open="false" ;;
         esac

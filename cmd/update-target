@@ -107,9 +107,16 @@ is_valid_target() {
     return 1
 }
 
+target_seen() {
+    local candidate="$1" target
+    for target in "${RUN_TARGETS[@]}"; do
+        [[ "$target" == "$candidate" ]] && return 0
+    done
+    return 1
+}
+
 # Expand 'all' and drop duplicates while keeping the requested order.
 RUN_TARGETS=()
-declare -A SEEN_TARGETS=()
 for target in "${TARGETS[@]}"; do
     if [[ "$target" == "all" ]]; then
         candidates=("${ALL_EXPANSION[@]}")
@@ -123,8 +130,7 @@ for target in "${TARGETS[@]}"; do
             echo "Available targets: ${ALL_TARGETS[*]}, all" >&2
             exit 1
         fi
-        if [[ -z "${SEEN_TARGETS[$candidate]:-}" ]]; then
-            SEEN_TARGETS[$candidate]=1
+        if ! target_seen "$candidate"; then
             RUN_TARGETS+=("$candidate")
         fi
     done

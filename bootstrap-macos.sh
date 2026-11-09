@@ -43,6 +43,13 @@ fi
 print_info "Installing Lima and jq (this can take a few minutes on first run)..."
 brew install lima jq
 
+# The web console uses the Python 3 CGI fallback when BusyBox is absent.
+# Python 3 is provided by the Xcode Command Line Tools; warn without failing.
+if ! command -v python3 &>/dev/null; then
+    print_warn "Python 3 was not found: 'aibox web' will need it."
+    print_info "Install the Xcode Command Line Tools (xcode-select --install) or 'brew install python'."
+fi
+
 # --- Setup --------------------------------------------------------------------
 echo ""
 print_success "Dependencies installed."

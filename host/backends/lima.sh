@@ -54,9 +54,16 @@ vm_fstrim() {
 }
 
 vm_ip() {
+    # Lima exposes no routable guest IP with user-mode networking, and the
+    # IPAddress field was removed from `limactl list` in Lima 2.x. Keep it when
+    # an older Lima still provides it, otherwise return the SSH alias, which is
+    # the address callers can actually reach and display.
     local ip
     ip=$(lima_instance_field "$1" "IPAddress")
-    [[ "$ip" == "<no value>" ]] && ip=""
+    if [[ -z "$ip" || "$ip" == "<no value>" ]]; then
+        printf 'lima-%s\n' "$1"
+        return 0
+    fi
     printf '%s\n' "$ip"
 }
 

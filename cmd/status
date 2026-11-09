@@ -57,7 +57,7 @@ if vm_exists "$VM_NAME"; then
     echo "VM:       $VM_NAME ($STATE)"
     if [[ "$STATE" == "running" ]]; then
         GUEST_IP=$(vm_ip "$VM_NAME")
-        [[ -n "$GUEST_IP" ]] && echo "IP:       $GUEST_IP"
+        [[ -n "$GUEST_IP" ]] && echo "Address:  $GUEST_IP"
     fi
 else
     echo "VM:       $VM_NAME (not created - run 'aibox setup')"

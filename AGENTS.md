@@ -33,7 +33,10 @@ This repository contains bash scripts for managing an AI development VM with KVM
     the web console
   - `guest/system-service.sh` - Guest side of `web/lib/system-service.sh`
     (systemd, journalctl, docker)
-  - `web/` - Local web console (BusyBox httpd, CGI bash, vanilla HTML/CSS/JS)
+  - `web/` - Local web console (BusyBox httpd, or the Python CGI fallback,
+    CGI bash, vanilla HTML/CSS/JS)
+  - `web/lib/cgi-server.py` - Static + CGI server used when BusyBox httpd is
+    not available (macOS has no BusyBox package)
     - `web/public/i18n.js` - Translation catalogs (`en` default, `fr`); static
       text uses `data-i18n` attributes, dynamic text uses `t("key", params)`
     - `web/public/cgi-bin/api.sh` - API routes; `GET snapshots`, `POST
@@ -345,4 +348,6 @@ shellcheck script.sh
 - `systemctl` - for systemd user services
 - `launchctl` - for launchd user services (macOS)
 - `loginctl` - for linger management
+- `busybox` (httpd applet) - serves `aibox web` on Linux
+- `python3` - serves `aibox web` when BusyBox is unavailable (macOS)
 - `shellcheck` - for bash linting (installed in the VM by `guest/install-deps.sh`)

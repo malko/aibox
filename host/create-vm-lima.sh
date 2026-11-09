@@ -40,7 +40,8 @@ if [[ ! "$VCPU" =~ ^[0-9]+$ ]] || [[ ! "$MEMORY" =~ ^[0-9]+$ ]] || [[ ! "$DISK" 
 fi
 
 # Host directory shared with the guest (declared in the Lima template).
-HOST_SHARE_DIR="$HOME/git"
+HOST_SHARE_DIR=$(get_config "HOST_SHARE_DIR" "$HOME/git")
+HOST_SHARE_DIR=$(aibox_expand_tilde "$HOST_SHARE_DIR")
 mkdir -p "$HOST_SHARE_DIR"
 print_info "Host directory $HOST_SHARE_DIR will be shared at ~/git in the VM."
 
@@ -49,9 +50,11 @@ TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/aibox-lima.XXXXXX")"
 TMP_TEMPLATE="$TMP_DIR/aibox.yaml"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+SHARE_SED=$(printf '%s' "$HOST_SHARE_DIR" | sed 's/[&|]/\\&/g')
 sed -e "s/__CPUS__/$VCPU/" \
     -e "s/__MEMORY__/${MEMORY}GiB/" \
     -e "s/__DISK__/${DISK}GiB/" \
+    -e "s|__SHARE_DIR__|$SHARE_SED|" \
     "$TEMPLATE" > "$TMP_TEMPLATE"
 
 print_info "Creating and starting the Lima instance '$VM_NAME'..."

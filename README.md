@@ -44,22 +44,21 @@ Scripts for managing an AI development virtual machine with reverse proxy and se
 
 - KVM/QEMU with libvirt
 - virsh, libvirt-client, virt-install installed
-- BusyBox with the `httpd` applet, only for `aibox web`
+- BusyBox with the `httpd` applet, only for `aibox web` on Linux
 
 ```bash
 sudo apt install libvirt-clients virt-install busybox-static
 ```
 
-On macOS, install BusyBox with Homebrew:
-
-```bash
-brew install busybox
-```
+On macOS, `aibox web` falls back to the Python 3 CGI server shipped in
+`web/lib/cgi-server.py` (Python 3 comes with the Xcode Command Line Tools).
+BusyBox is used first when it is installed.
 
 ### Host Machine (macOS)
 
 - macOS 13.5 or newer (Apple Silicon or Intel)
 - [Lima](https://lima-vm.io/) and `jq` (installed automatically by `bootstrap-macos.sh`)
+- Python 3 (Xcode Command Line Tools) only for `aibox web`
 
 ```bash
 brew install lima jq
@@ -76,7 +75,8 @@ It can be forced with `VM_BACKEND` in `~/.config/aibox/aibox.conf`.
 ### Platform differences on macOS
 
 - The VM is an Ubuntu cloud image managed by Lima: no manual OS install.
-- Host `~/git` is mounted writable at `~/git` in the VM (Lima mounts replace virtiofs).
+- The host share (`HOST_SHARE_DIR`, default `~/git`) is mounted writable at
+  `~/git` in the VM (Lima mounts replace virtiofs).
 - SSH keys are managed by Lima; the `ssh` setup step is a no-op.
 - The tunnel runs as a per-user LaunchAgent (`aibox tunnel install`).
 - Lima's automatic port forwarding is disabled, so services are only reachable
@@ -256,7 +256,9 @@ redirected, the dot is replaced by the state as text (`[up]`, `[down]`,
 ./aibox web --no-open
 ```
 
-It listens on `127.0.0.1` only and requires BusyBox with the `httpd` applet.
+It listens on `127.0.0.1` only and uses BusyBox httpd when it is available
+(Linux), or the Python 3 CGI fallback shipped in `web/lib/cgi-server.py`
+(macOS).
 The server runs in the foreground: press `Ctrl+C` to stop it, or use the
 **close / fermer** button in the header. Closing the browser tab also stops it
 after a short grace period; a reload cancels that delayed stop. Nothing keeps
@@ -543,7 +545,7 @@ aibox/
 │   ├── service-edit             # Edit or rename a service
 │   ├── service-remove           # Remove service
 │   ├── service-list             # List services and LAN modes
-│   ├── web                      # Local web console (BusyBox httpd)
+│   ├── web                      # Local web console (BusyBox or Python CGI)
 │   ├── config                   # Read or update aibox.conf
 │   ├── update-target            # Dispatch an update target
 │   ├── check-updates            # Check for available updates
@@ -576,8 +578,8 @@ aibox/
 │   ├── system-service.sh        # Inspect/restart guest services (web helper)
 │   └── install-update-check.sh  # Install the update check timer
 ├── web/                         # Local web console
-│   ├── public/                  # HTML/CSS/JS and BusyBox CGI (i18n.js = translations)
-│   └── lib/                     # CGI helpers, job runner, open-terminal.sh, system-service.sh
+│   ├── public/                  # HTML/CSS/JS and CGI (i18n.js = translations)
+│   └── lib/                     # CGI helpers, cgi-server.py, job runner, open-terminal.sh, system-service.sh
 ├── services-funcs.sh            # services.json + per-service LAN state
 └── shared-funcs.sh              # Common functions
 ```

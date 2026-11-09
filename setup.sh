@@ -107,9 +107,9 @@ init_config_file
 # The backend must be loaded after the config so VM_BACKEND can be read.
 source "$SCRIPT_DIR/host/backend.sh"
 
-vm_backend_require
-
 if [[ "$STATUS_ONLY" == "true" ]]; then
+    # Status is best-effort: it must work even when the backend tools are not
+    # installed yet, so do not require virsh/limactl here.
     source "$SCRIPT_DIR/setup/status.sh"
     if [[ "$JSON_MODE" == "true" ]]; then
         setup_status_json
@@ -118,6 +118,8 @@ if [[ "$STATUS_ONLY" == "true" ]]; then
     fi
     exit 0
 fi
+
+vm_backend_require
 
 
 # The web job runner feeds the sudo password on stdin, in memory only.
