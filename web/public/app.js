@@ -287,6 +287,15 @@ function toast(message, isError = false) {
   toastTimer = setTimeout(() => node.classList.remove("show"), isError ? 6500 : 3500);
 }
 
+/* Cancellation callback of the dialog currently waiting for an answer
+   (confirmDialog / promptSudoPassword). The native "close" event is queued as
+   a task: a dialog closed just before another one opens would deliver its
+   "close" to the next one and resolve it early. Explicit closes therefore go
+   through closeDialog() and notify this callback; the waiting dialog only
+   listens for "close" as a safety net for native closes, ignoring events that
+   arrive while it is still open. */
+let dialogCancel = null;
+
 function closeDialog() {
   const dialog = $("#dialog");
   if (dialog.open) dialog.close();
@@ -294,11 +303,22 @@ function closeDialog() {
   state.jobDialogStatusEl = null;
   state.jobDialogCloseBtn = null;
   state.jobDialogKillBtn = null;
+
+  const cancel = dialogCancel;
+  dialogCancel = null;
+  cancel?.();
 }
 
 function openDialog({ title, body, actions = [], className = "" }) {
   const dialog = $("#dialog");
+
+  // Replacing an open dialog, or one that just closed, invalidates a pending
+  // confirmation: resolve it as cancelled instead of leaving it hanging.
+  const pendingCancel = dialogCancel;
+  dialogCancel = null;
   if (dialog.open) dialog.close();
+  pendingCancel?.();
+
   dialog.className = className ? `dialog ${className}` : "dialog";
 
   $("#dialog-title").textContent = title;
@@ -339,6 +359,8 @@ function promptSudoPassword({
   return new Promise((resolve) => {
     const dialog = $("#dialog");
     let settled = false;
+    let cancel = null;
+    let onClose = null;
     const input = el("input", {
       type: "password",
       className: "input mono",
@@ -349,9 +371,18 @@ function promptSudoPassword({
     const finish = (value) => {
       if (settled) return;
       settled = true;
+      if (dialogCancel === cancel) dialogCancel = null;
+      if (onClose) dialog.removeEventListener("close", onClose);
       input.value = "";
       if (dialog.open) dialog.close();
       resolve(value);
+    };
+    cancel = () => finish(null);
+    // Safety net for a native close. A "close" queued by a previous dialog is
+    // ignored while this one is open, so it cannot cancel the prompt early.
+    onClose = () => {
+      if (dialog.open) return;
+      finish(null);
     };
     const submit = () => {
       if (!input.value) {
@@ -374,7 +405,7 @@ function promptSudoPassword({
       title,
       body,
       actions: [
-        { label: t("common.cancel"), onClick: () => finish(null) },
+        { label: t("common.cancel"), onClick: cancel },
         {
           label: confirmLabel,
           className: "btn-primary",
@@ -382,23 +413,39 @@ function promptSudoPassword({
         },
       ],
     });
+    dialogCancel = cancel;
+    dialog.addEventListener("close", onClose);
     input.focus();
-    dialog.addEventListener("close", () => finish(null), { once: true });
   });
 }
 
 function confirmDialog(title, message, confirmLabel = t("common.confirm"), danger = false) {
   return new Promise((resolve) => {
     const dialog = $("#dialog");
+    let settled = false;
+    let cancel = null;
+    let onClose = null;
     const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      if (dialogCancel === cancel) dialogCancel = null;
+      if (onClose) dialog.removeEventListener("close", onClose);
       if (dialog.open) dialog.close();
       resolve(value);
+    };
+    cancel = () => finish(false);
+    // Safety net for a native close. A "close" queued by a previous dialog is
+    // ignored while this one is open, so it cannot resolve the confirmation
+    // early.
+    onClose = () => {
+      if (dialog.open) return;
+      finish(false);
     };
     openDialog({
       title,
       body: message,
       actions: [
-        { label: t("common.cancel"), onClick: () => finish(false) },
+        { label: t("common.cancel"), onClick: cancel },
         {
           label: confirmLabel,
           className: danger ? "btn-danger" : "btn-primary",
@@ -406,7 +453,8 @@ function confirmDialog(title, message, confirmLabel = t("common.confirm"), dange
         },
       ],
     });
-    dialog.addEventListener("close", () => resolve(false), { once: true });
+    dialogCancel = cancel;
+    dialog.addEventListener("close", onClose);
   });
 }
 
